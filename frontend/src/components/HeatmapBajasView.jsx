@@ -4,6 +4,7 @@ import { ShieldAlert, AlertTriangle, PieChart } from 'lucide-react';
 export default function HeatmapBajasView({ filters = {} }) {
   const [bajasData, setBajasData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mostrarTodosMotivos, setMostrarTodosMotivos] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,6 +49,8 @@ export default function HeatmapBajasView({ filters = {} }) {
 
   const motivos = bajasData?.motivos || [];
   const totalBajas = bajasData?.total_bajas_evaluadas || 0;
+  const motivosVisibles = mostrarTodosMotivos ? motivos : motivos.slice(0, 3);
+  const tieneMasMotivos = motivos.length > 3;
 
   return (
     <div className="executive-card" style={{ gridColumn: 'span 1' }}>
@@ -71,7 +74,7 @@ export default function HeatmapBajasView({ filters = {} }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {motivos.slice(0, 7).map((item, idx) => {
+          {motivosVisibles.map((item, idx) => {
             const isTop = idx === 0;
             const barWidth = Math.max(8, item.porcentaje);
 
@@ -110,6 +113,29 @@ export default function HeatmapBajasView({ filters = {} }) {
               </div>
             );
           })}
+
+          {/* Botón desplegable colapsable */}
+          {tieneMasMotivos && (
+            <button
+              onClick={() => setMostrarTodosMotivos(!mostrarTodosMotivos)}
+              className="touch-target"
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: 'var(--accent-primary)',
+                background: 'rgba(30, 111, 192, 0.06)',
+                border: '1px solid rgba(30, 111, 192, 0.15)',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                textAlign: 'center',
+                marginTop: '0.25rem'
+              }}
+            >
+              {mostrarTodosMotivos ? 'Ocultar motivos adicionales ▴' : `Ver todos los motivos (${motivos.length}) ▾`}
+            </button>
+          )}
         </div>
       )}
 

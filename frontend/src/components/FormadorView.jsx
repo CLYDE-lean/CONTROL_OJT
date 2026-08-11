@@ -5,6 +5,7 @@ import EmbudoSupervivenciaGrupo from './EmbudoSupervivenciaGrupo';
 import EstadoFinalGrupoFormador from './EstadoFinalGrupoFormador';
 import CurvaAprendizajeSemana from './CurvaAprendizajeSemana';
 import ReglasDeOroCard from './ReglasDeOroCard';
+import EmbudoEjecutivoOjtView from './EmbudoEjecutivoOjtView';
 
 export default function FormadorView({ data, filtros, onAbrirModal, onNavegarDetalle }) {
   const embudo = data?.embudo;
@@ -22,6 +23,11 @@ export default function FormadorView({ data, filtros, onAbrirModal, onNavegarDet
         <KpiCard label="Llegaron al Día 5"   valor={dia5.toLocaleString()}    icon={Award}          color="#0d9488" sub={`${tasa}% del total`} />
         <KpiCard label="Bajas en el proceso" valor={bajas.toLocaleString()}   icon={AlertTriangle}  color="#dc2626" sub="No llegaron a Día 5" />
         <KpiCard label="Tasa de Retención"   valor={`${tasa}%`}              icon={TrendingUp}     color={tasa >= 55 ? '#0d9488' : tasa >= 35 ? '#d97706' : '#dc2626'} sub="al Día 5 (meta 55%)" />
+      </div>
+
+      {/* ── Embudo Ejecutivo de Conversión de 3 Etapas (Movidio a Rendimiento) ── */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <EmbudoEjecutivoOjtView filters={filtros} />
       </div>
 
       {/* ── Embudo de Supervivencia del Grupo ── */}

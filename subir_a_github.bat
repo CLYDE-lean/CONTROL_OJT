@@ -13,8 +13,8 @@ git init
 echo 2. Agregando archivos al staging...
 git add .
 
-echo 3. Creando commit con la solucion Netlify Serverless API...
-git commit -m "feat: Integracion de Netlify Functions para backend Express y conexion live a Supabase"
+echo 3. Creando commit con las mejoras de Embudo OJT Stacked Bars...
+git commit -m "feat: Embudo OJT Stacked Bars de 3 estados, leyenda interactiva, auditoria de ingreso a OJT real y fix de tooltips"
 
 echo 4. Asignando rama principal main...
 git branch -M main
@@ -22,7 +22,7 @@ git branch -M main
 git remote remove origin 2>nul
 git remote add origin https://github.com/CLYDE-lean/CONTROL_OJT.git
 
-echo 5. Subiendo codigo a GitHub...
+echo 5. Subiendo codigo a GitHub y desplegando en Netlify...
 git push -u origin main --force
 
 echo.

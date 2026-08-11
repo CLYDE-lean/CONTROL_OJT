@@ -36,7 +36,7 @@ export default function FiltroFlotantePro({
   const filtrosActivos = Object.entries(filtros).filter(([_, v]) => Boolean(v) && v !== '');
   const cantidadActivos = filtrosActivos.length;
 
-  // Cerrar al presionar tecla ESC o clic afuera
+  // Cerrar al presionar tecla ESC o clic afuera + Bloquear scroll de body
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') setAbierto(false);
@@ -48,10 +48,14 @@ export default function FiltroFlotantePro({
     };
 
     if (abierto) {
+      document.body.classList.add('modal-open');
       document.addEventListener('keydown', handleKeyDown);
       document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.body.classList.remove('modal-open');
     }
     return () => {
+      document.body.classList.remove('modal-open');
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -71,20 +75,11 @@ export default function FiltroFlotantePro({
   return (
     <>
       {/* ── 1. BOTÓN FLOTANTE FAB (STICKY / FIXED OVERLAY) ── */}
-      <div 
-        style={{
-          position: 'fixed',
-          bottom: '28px',
-          right: '28px',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem'
-        }}
-      >
+      <div className="fab-container">
         <button
           onClick={() => setAbierto(!abierto)}
           aria-label="Abrir Filtros del Dashboard"
+          className="touch-target"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -114,35 +109,32 @@ export default function FiltroFlotantePro({
           {/* Icono de Filtro Animado */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <SlidersHorizontal 
-              size={19} 
+              size={18} 
               style={{ 
-                color: cantidadActivos > 0 ? '#38bdf8' : '#94a3b8',
+                color: cantidadActivos > 0 ? '#38bdf8' : '#e2e8f0',
                 transition: 'transform 0.3s ease',
                 transform: abierto ? 'rotate(90deg)' : 'rotate(0deg)'
               }} 
             />
             {cantidadActivos > 0 && (
-              <span 
-                style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '-6px',
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: '#38bdf8',
-                  boxShadow: '0 0 8px #38bdf8',
-                  animation: 'pulse 1.8s infinite'
-                }} 
-              />
+              <span style={{
+                position: 'absolute',
+                top: -3,
+                right: -3,
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#38bdf8',
+                boxShadow: '0 0 8px #38bdf8'
+              }} />
             )}
           </div>
 
           {/* Texto del Botón */}
-          <span style={{ 
-            fontSize: '0.88rem', 
-            fontWeight: 700, 
-            letterSpacing: '-0.01em', 
+          <span style={{
+            fontWeight: 700,
+            fontSize: '0.88rem',
+            letterSpacing: '0.02em',
             fontFamily: 'Outfit, Inter, sans-serif'
           }}>
             {abierto ? 'Cerrar Filtros' : 'Filtros BI'}
@@ -185,23 +177,10 @@ export default function FiltroFlotantePro({
       {/* ── 3. DRAWER SLIDE-IN PANEL ── */}
       <div
         ref={drawerRef}
+        className="drawer-panel"
         style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          height: '100vh',
-          width: '380px',
-          maxWidth: '92vw',
-          background: '#ffffff',
-          boxShadow: '-12px 0 40px rgba(15, 23, 42, 0.25)',
-          zIndex: 1060,
           transform: abierto ? 'translateX(0)' : 'translateX(100%)',
-          visibility: abierto ? 'visible' : 'hidden',
-          pointerEvents: abierto ? 'auto' : 'none',
-          transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s ease',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden'
+          visibility: abierto ? 'visible' : 'hidden'
         }}
       >
         {/* Cabecera del Panel */}

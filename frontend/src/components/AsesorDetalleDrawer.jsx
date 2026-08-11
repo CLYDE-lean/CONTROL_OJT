@@ -27,12 +27,18 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
       />
 
       {/* Sliding Drawer */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: '440px', maxWidth: '90vw',
-        background: '#ffffff', boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.15)', zIndex: 1200,
-        display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '1.5rem',
-        borderLeft: '1px solid #e8edf5', fontFamily: 'Inter, sans-serif'
-      }}>
+      <div 
+        className="drawer-panel"
+        style={{
+          zIndex: 1200,
+          display: 'flex',
+          flexDirection: 'column',
+          overflowY: 'auto',
+          padding: '1.5rem',
+          borderLeft: '1px solid #e8edf5',
+          fontFamily: 'Inter, sans-serif'
+        }}
+      >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid #e8edf5' }}>
           <div>
@@ -46,7 +52,8 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
           </div>
           <button 
             onClick={onClose}
-            style={{ border: 'none', background: '#f0f4f9', padding: '0.4rem', borderRadius: '50%', cursor: 'pointer', color: '#0f1c2e' }}
+            className="touch-target"
+            style={{ border: 'none', background: '#f0f4f9', borderRadius: '50%', cursor: 'pointer', color: '#0f1c2e' }}
           >
             <X size={18} />
           </button>

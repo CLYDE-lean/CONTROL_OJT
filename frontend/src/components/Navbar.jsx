@@ -9,30 +9,13 @@ const TABS = [
 
 export default function Navbar({ vistaActiva, onCambiarVista, totalDecisionesPendientes, dbConnected }) {
   return (
-    <header 
-      className="header-compacto"
-      style={{
-        height: '44px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 14px',
-        background: 'linear-gradient(135deg, #0f1c2e 0%, #1e293b 100%)',
-        borderRadius: '10px',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        boxShadow: '0 4px 16px rgba(15, 28, 46, 0.25)',
-        marginBottom: '1.25rem',
-        position: 'sticky',
-        top: '12px',
-        zIndex: 900
-      }}
-    >
-      {/* ── Sección Izquierda: Logo + Título + Divisor + Tabs Inline ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-        {/* Logo de 22px */}
+    <header className="header-compacto">
+      {/* ── Fila Superior / Sección Izquierda: Logo + Título + Status ── */}
+      <div className="navbar-top-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Logo */}
         <div style={{
-          width: '22px',
-          height: '22px',
+          width: '24px',
+          height: '24px',
           borderRadius: '6px',
           background: 'linear-gradient(135deg, #1e6fc0, #4f46e5)',
           display: 'flex',
@@ -42,38 +25,79 @@ export default function Navbar({ vistaActiva, onCambiarVista, totalDecisionesPen
           boxShadow: '0 2px 8px rgba(30, 111, 192, 0.4)',
           flexShrink: 0
         }}>
-          <Layers size={13} />
+          <Layers size={14} />
         </div>
 
-        {/* Título corto */}
+        {/* Título */}
         <span style={{
-          fontSize: '13px',
-          fontWeight: 700,
+          fontSize: '14px',
+          fontWeight: 800,
           color: '#f8fafc',
           fontFamily: 'Outfit, Inter, sans-serif',
           whiteSpace: 'nowrap',
-          letterSpacing: '-0.01em'
+          letterSpacing: '-0.02em'
         }}>
-          Control OJT
+          Control de Formación y Retención OJT
         </span>
 
-        {/* Divisor vertical delgado */}
-        <div style={{
-          width: '0.5px',
-          height: '18px',
-          background: 'rgba(255, 255, 255, 0.18)',
-          flexShrink: 0
-        }} />
+        {/* Divisor ocultable en móvil */}
+        <div 
+          className="nav-divider"
+          style={{
+            width: '1px',
+            height: '16px',
+            background: 'rgba(255, 255, 255, 0.18)',
+            flexShrink: 0,
+            margin: '0 2px'
+          }} 
+        />
 
-        {/* Segmented Control Inline de Tabs */}
+        {/* Status indicator en la fila superior para móvil */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+          {totalDecisionesPendientes > 0 && (
+            <span 
+              title={`${totalDecisionesPendientes} alertas de Día 2 pendientes`}
+              style={{
+                fontSize: '0.7rem',
+                color: '#fca5a5',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontWeight: 700
+              }}
+            >
+              ⚠️ {totalDecisionesPendientes}
+            </span>
+          )}
+
+          <span
+            className={`header-estado ${dbConnected ? 'ok' : 'error'}`}
+            title={dbConnected ? 'Supabase conectado' : 'Sin conexión a Supabase'}
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: dbConnected ? '#34d399' : '#f87171',
+              boxShadow: dbConnected ? '0 0 8px #34d399' : '0 0 8px #f87171',
+              transition: 'background 0.3s ease, box-shadow 0.3s ease',
+              cursor: 'pointer'
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ── Segmented Control Tabs (Con Scroll Horizontal Táctil en Móvil) ── */}
+      <div className="navbar-tabs-scroll">
         <nav style={{
           display: 'flex',
           alignItems: 'center',
           gap: '4px',
-          background: 'rgba(255, 255, 255, 0.05)',
-          padding: '2px',
+          background: 'rgba(255, 255, 255, 0.06)',
+          padding: '3px',
           borderRadius: '8px',
-          border: '1px solid rgba(255, 255, 255, 0.06)'
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          width: 'fit-content'
         }}>
           {TABS.map(tab => {
             const Icon = tab.icon;
@@ -83,24 +107,23 @@ export default function Navbar({ vistaActiva, onCambiarVista, totalDecisionesPen
                 key={tab.id}
                 onClick={() => onCambiarVista(tab.id)}
                 style={{
-                  height: '28px',
-                  padding: '0 10px',
-                  fontSize: '12px',
+                  height: '32px',
+                  padding: '0 12px',
+                  fontSize: '12.5px',
                   fontWeight: activo ? 600 : 400,
-                  color: activo ? '#f8fafc' : 'rgba(255, 255, 255, 0.6)',
-                  background: activo ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
+                  color: activo ? '#f8fafc' : 'rgba(255, 255, 255, 0.65)',
+                  background: activo ? 'rgba(255, 255, 255, 0.14)' : 'transparent',
                   border: 'none',
                   borderRadius: '6px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '5px',
+                  gap: '6px',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap',
-                  boxShadow: activo ? '0 1px 4px rgba(0,0,0,0.2)' : 'none'
+                  boxShadow: activo ? '0 1px 4px rgba(0,0,0,0.25)' : 'none',
+                  touchAction: 'manipulation'
                 }}
-                onMouseEnter={e => { if (!activo) e.currentTarget.style.color = 'rgba(255, 255, 255, 0.9)'; }}
-                onMouseLeave={e => { if (!activo) e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)'; }}
               >
                 <Icon size={14} style={{ opacity: activo ? 1 : 0.75, color: activo ? '#38bdf8' : 'currentColor' }} />
                 {tab.label}
@@ -123,41 +146,6 @@ export default function Navbar({ vistaActiva, onCambiarVista, totalDecisionesPen
             );
           })}
         </nav>
-      </div>
-
-      {/* ── Sección Derecha: Alertas + Punto de Estado Supabase ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {totalDecisionesPendientes > 0 && (
-          <span 
-            title={`${totalDecisionesPendientes} alertas de Día 2 pendientes`}
-            style={{
-              fontSize: '0.72rem',
-              color: '#fca5a5',
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              padding: '2px 8px',
-              borderRadius: '12px',
-              fontWeight: 700
-            }}
-          >
-            ⚠️ {totalDecisionesPendientes}
-          </span>
-        )}
-
-        {/* Punto de estado con tooltip */}
-        <span
-          className={`header-estado ${dbConnected ? 'ok' : 'error'}`}
-          title={dbConnected ? 'Supabase conectado' : 'Sin conexión a Supabase'}
-          style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: dbConnected ? '#34d399' : '#f87171',
-            boxShadow: dbConnected ? '0 0 8px #34d399' : '0 0 8px #f87171',
-            transition: 'background 0.3s ease, box-shadow 0.3s ease',
-            cursor: 'pointer'
-          }}
-        />
       </div>
     </header>
   );

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Users, Award, AlertTriangle, Target, BarChart2, Zap } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Award, AlertTriangle, Target, BarChart2, DollarSign, ShieldAlert, Layers } from 'lucide-react';
 import RoiExtensionesView from './RoiExtensionesView';
 import ComparativaModalidadView from './ComparativaModalidadView';
-import ExcelFlashOjtView from './ExcelFlashOjtView';
+import FlashOjtResumenCard from './FlashOjtResumenCard';
 import EmbudoEjecutivoOjtView from './EmbudoEjecutivoOjtView';
 import HeatmapBajasView from './HeatmapBajasView';
 import IngresosVsEficaciaView from './IngresosVsEficaciaView';
 import RadarPerfilExitoSegmento from './RadarPerfilExitoSegmento';
-import ReglasDeOroCard from './ReglasDeOroCard';
 
-export default function GerenciaView({ data, roiData, filtros = {} }) {
+export default function GerenciaView({ data, roiData, filtros = {}, onNavegarAOperacion }) {
+  const [subTab, setSubTab] = useState('resumen'); // 'resumen' | 'atricion' | 'roi'
   const [costoIncumplimiento, setCostoIncumplimiento] = useState(null);
 
   useEffect(() => {
@@ -39,11 +39,9 @@ export default function GerenciaView({ data, roiData, filtros = {} }) {
 
   const total        = embudo?.total_asesores_unicos || 0;
   const dia5Count    = embudo?.dias_principales_1_8?.find(d => d.dia === 5)?.activos || 0;
-  const dia8Count    = embudo?.dias_principales_1_8?.find(d => d.dia === 8)?.activos || 0;
   const tasaGlobal   = total > 0 ? Math.round((dia5Count / total) * 100) : 0;
   const tasaExt      = roi?.metricas?.tasa_exito_extension_pct || 0;
   const excesos      = roi?.metricas?.total_exceso_politica_8d || 0;
-  const enExtension  = roi?.metricas?.total_enviados_extension || 0;
 
   const zonaSemaforo = tasaGlobal >= 60 ? 'VERDE' : tasaGlobal >= 40 ? 'AMARILLO' : 'ROJO';
   const semaforoColor = { VERDE: '#0d9488', AMARILLO: '#d97706', ROJO: '#dc2626' };
@@ -52,77 +50,129 @@ export default function GerenciaView({ data, roiData, filtros = {} }) {
 
   return (
     <div>
-      {/* ── Semáforo principal ── */}
+      {/* ── Sub-Tabs Internos Gerenciales (Estilo Power BI) ── */}
       <div style={{
-        background: semaforoBg[zonaSemaforo],
-        border: `1px solid ${semaforoBorder[zonaSemaforo]}`,
-        borderLeft: `5px solid ${semaforoColor[zonaSemaforo]}`,
-        borderRadius: '14px',
-        padding: '1.25rem 1.75rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: '1.5rem',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.05)'
+        marginBottom: '1.25rem',
+        borderBottom: '1px solid var(--border-color)',
+        paddingBottom: '0.65rem'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{
-            width: '52px', height: '52px', borderRadius: '12px',
-            background: semaforoColor[zonaSemaforo],
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
-          }}>
-            <Target size={26} />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: semaforoColor[zonaSemaforo], textTransform: 'uppercase' }}>
-              Salud Operativa Global — Día 5
-            </div>
-            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif' }}>
-              {tasaGlobal}% de Retención Efectiva
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {[
+            { id: 'resumen', label: 'Resumen Ejecutivo', icon: BarChart2 },
+            { id: 'atricion', label: 'Análisis de Atrición', icon: ShieldAlert },
+            { id: 'roi', label: 'ROI & Extensiones', icon: DollarSign }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const activo = subTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setSubTab(tab.id)}
+                className="touch-target"
+                style={{
+                  padding: '0.45rem 0.95rem',
+                  fontSize: '0.82rem',
+                  fontWeight: activo ? 700 : 500,
+                  color: activo ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  background: activo ? 'var(--accent-primary-subtle)' : 'transparent',
+                  border: `1px solid ${activo ? 'rgba(30, 111, 192, 0.25)' : 'transparent'}`,
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Icon size={15} style={{ color: activo ? 'var(--accent-primary)' : 'currentColor' }} />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* ── KPIs Rápidos de Gerencia ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-        <KpiGerencia label="Total Evaluados"     valor={total.toLocaleString()}     icon={Users}          color="#1e6fc0" trend="up"   sub="en base de datos" />
-        <KpiGerencia label="Retención al Día 5"  valor={`${tasaGlobal}%`}          icon={Award}          color={semaforoColor[zonaSemaforo]} trend={tasaGlobal>=55?'up':'down'} sub="meta gerencial 55%" />
-        <KpiGerencia label="Éxito de Extensión" valor={`${tasaExt}%`}            icon={TrendingUp}     color="#0d9488" trend="up"   sub="después del Día 5" />
-        <KpiGerencia label="Desvíos >8 Días"    valor={excesos.toLocaleString()}   icon={AlertTriangle}  color="#dc2626" trend="down" sub="asesores fuera de regla" />
-      </div>
+      {/* ── TAB 1: RESUMEN EJECUTIVO (Vista por defecto) ── */}
+      {subTab === 'resumen' && (
+        <>
+          {/* Semáforo principal */}
+          <div style={{
+            background: semaforoBg[zonaSemaforo],
+            border: `1px solid ${semaforoBorder[zonaSemaforo]}`,
+            borderLeft: `5px solid ${semaforoColor[zonaSemaforo]}`,
+            borderRadius: '14px',
+            padding: '1.1rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '1.25rem',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{
+                width: '46px', height: '46px', borderRadius: '12px',
+                background: semaforoColor[zonaSemaforo],
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+              }}>
+                <Target size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.73rem', fontWeight: 700, color: semaforoColor[zonaSemaforo], textTransform: 'uppercase' }}>
+                  Salud Operativa Global — Día 5
+                </div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif' }}>
+                  {tasaGlobal}% de Retención Efectiva
+                </div>
+              </div>
+            </div>
+          </div>
 
-      {/* ── Análisis de Bajas por Campaña y Motivo (Treemap/Heatmap) ── */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <HeatmapBajasView filters={filtros} data={data} />
-      </div>
+          {/* KPIs Rápidos de Gerencia */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+            <KpiGerencia label="Total Evaluados"     valor={total.toLocaleString()}     icon={Users}          color="#1e6fc0" trend="up"   sub="en base de datos" />
+            <KpiGerencia label="Retención al Día 5"  valor={`${tasaGlobal}%`}          icon={Award}          color={semaforoColor[zonaSemaforo]} trend={tasaGlobal>=55?'up':'down'} sub="meta gerencial 55%" />
+            <KpiGerencia label="Éxito de Extensión" valor={`${tasaExt}%`}            icon={TrendingUp}     color="#0d9488" trend="up"   sub="después del Día 5" />
+            <KpiGerencia label="Desvíos >8 Días"    valor={excesos.toLocaleString()}   icon={AlertTriangle}  color="#dc2626" trend="down" sub="asesores fuera de regla" />
+          </div>
 
-      {/* ── Ingresos vs. Eficacia Operativa Histórica & Perfil de Éxito ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
-        <IngresosVsEficaciaView data={data} />
-        <RadarPerfilExitoSegmento data={data} />
-      </div>
+          {/* Embudo Ejecutivo de Conversión */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <EmbudoEjecutivoOjtView filters={filtros} />
+          </div>
 
-      {/* ── Embudo Ejecutivo OJT a Operaciones (I-OP) ── */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <EmbudoEjecutivoOjtView filters={filtros} />
-      </div>
+          {/* Tarjeta Resumen Flash OJT (1 sola fila compacta con salto a Operación) */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <FlashOjtResumenCard filters={filtros} onNavegarAOperacion={onNavegarAOperacion} />
+          </div>
+        </>
+      )}
 
-      {/* ── Cuadro Excel Flash OJT ── */}
-      <div style={{ marginTop: '1.5rem' }}>
-        <ExcelFlashOjtView filters={filtros} />
-      </div>
+      {/* ── TAB 2: ANÁLISIS DE ATRICIÓN ── */}
+      {subTab === 'atricion' && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <HeatmapBajasView filters={filtros} data={data} />
+        </div>
+      )}
 
-      {/* ── ROI de Extensiones ── */}
-      <div style={{ marginTop: '1.5rem' }}>
-        <RoiExtensionesView roiData={roi} />
-      </div>
+      {/* ── TAB 3: ROI & EXTENSIONES ── */}
+      {subTab === 'roi' && (
+        <>
+          {/* Fila 1: ROI Extensiones & Comparativa Modalidad en 2 Columnas */}
+          <div className="grid-2" style={{ gap: '1.25rem', marginBottom: '1.5rem' }}>
+            <RoiExtensionesView roiData={roi} />
+            <ComparativaModalidadView filtros={filtros} />
+          </div>
 
-      {/* ── Comparativa Remoto vs Presencial ── */}
-      <div style={{ marginTop: '1.5rem' }}>
-        <ComparativaModalidadView filtros={filtros} />
-      </div>
-
+          {/* Fila 2: Ingresos vs Eficacia & Perfil de Éxito en 2 Columnas */}
+          <div className="grid-2" style={{ gap: '1.25rem', marginBottom: '1.5rem' }}>
+            <IngresosVsEficaciaView data={data} />
+            <RadarPerfilExitoSegmento data={data} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

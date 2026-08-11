@@ -10,7 +10,6 @@ import ControlOperativoTabla  from './components/ControlOperativoTabla';
 import FormadorView           from './components/FormadorView';
 import GerenciaView           from './components/GerenciaView';
 import ExcelFlashOjtView      from './components/ExcelFlashOjtView';
-import EmbudoEjecutivoOjtView from './components/EmbudoEjecutivoOjtView';
 import ScatterVolumenVsCalidad from './components/ScatterVolumenVsCalidad';
 import DistribucionAtencionesView from './components/DistribucionAtencionesView';
 import ReglasDeOroCard        from './components/ReglasDeOroCard';
@@ -32,6 +31,8 @@ export default function App() {
   const [cargando, setCargando] = useState(true);
   const [modalDecision, setModalDecision] = useState(null);
   const [toast, setToast] = useState(null);
+
+  const [subVistaOperacion, setSubVistaOperacion] = useState('ranking'); // 'ranking' | 'evolucion'
 
   const handleFiltroChange = (key, value) => {
     setFiltros(prev => ({ ...prev, [key]: value }));
@@ -58,6 +59,17 @@ export default function App() {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
+  };
+
+  const handleNavegarAOperacion = () => {
+    setVistaActiva('supervisor');
+    setSubVistaOperacion('ranking');
+    setTimeout(() => {
+      const el = document.getElementById('flash-ojt-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
   };
 
   const cargarDatos = async () => {
@@ -115,19 +127,31 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Subheader con Actualizar ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', marginTop: '0.25rem' }}>
+      {/* ── Subheader con Título Principal Destacado y Botón Actualizar ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem', marginTop: '0.25rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-heading)', letterSpacing: '-0.02em' }}>
-            { vistaActiva === 'supervisor' && 'Panel de Supervisión Operativa' }
-            { vistaActiva === 'formador'   && 'Panel de Formadores' }
-            { vistaActiva === 'gerencia'   && 'Panel Gerencial' }
+          <h1 style={{ 
+            fontSize: '1.85rem', 
+            fontWeight: 800, 
+            color: 'var(--text-primary)', 
+            fontFamily: 'var(--font-heading)', 
+            letterSpacing: '-0.03em',
+            lineHeight: 1.15
+          }}>
+            Control de Formación y Retención OJT
           </h1>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '0.15rem' }}>
-            <strong style={{ color: 'var(--accent-primary)' }}>{data?.embudo?.total_asesores_unicos?.toLocaleString() || '–'} asesores únicos</strong> en base · {new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+            <span className="badge-exec badge-blue" style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem', fontWeight: 700 }}>
+              { vistaActiva === 'supervisor' && 'Panel de Supervisión Operativa' }
+              { vistaActiva === 'formador'   && 'Panel de Formadores' }
+              { vistaActiva === 'gerencia'   && 'Panel Gerencial' }
+            </span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+              <strong style={{ color: 'var(--accent-primary)' }}>{data?.embudo?.total_asesores_unicos?.toLocaleString() || '–'} asesores únicos</strong> en base · {new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </span>
+          </div>
         </div>
-        <button onClick={cargarDatos} className="btn-exec" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem' }}>
+        <button onClick={cargarDatos} className="btn-exec touch-target" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.95rem' }}>
           <RefreshCw size={14} className={cargando ? 'spin' : ''} />
           Actualizar
         </button>
@@ -136,28 +160,68 @@ export default function App() {
       {/* ── Contenido de cada pestaña ── */}
       <div style={{ opacity: cargando ? 0.7 : 1, transition: 'opacity 0.25s ease' }}>
 
-        {/* ── PESTAÑA: SUPERVISOR ── */}
+        {/* ── PESTAÑA: SUPERVISOR (OPERACIÓN) ── */}
         {vistaActiva === 'supervisor' && (
-          <>
+          <ErrorBoundary>
             {/* Gráfico 1 al 8 de Conversión */}
             <div id="funnel-d1-d8-section" style={{ marginBottom: '1.75rem' }}>
               <Embudo5DiasView embudoData={data?.embudo} />
             </div>
 
             {/* 📈 Scatter Plot & Distribución de Atenciones */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.75rem' }}>
+            <div className="grid-2" style={{ gap: '1.25rem', marginBottom: '1.75rem' }}>
               <ScatterVolumenVsCalidad data={data} />
               <DistribucionAtencionesView data={data} />
             </div>
 
-            {/* 📈 EMBUDO EJECUTIVO DE CONVERSIÓN DE 3 ETAPAS */}
-            <div style={{ marginBottom: '1.75rem' }}>
-              <EmbudoEjecutivoOjtView filters={filtros} />
+            {/* 📊 SECCIÓN EXCEL FLASH OJT E INDICADORES PONDERADOS (EXCLUSIVO EN OPERACIÓN) */}
+            <div id="flash-ojt-section" style={{ marginBottom: '1.75rem' }}>
+              <ExcelFlashOjtView filters={filtros} />
             </div>
 
-            {/* 📊 SECCIÓN EXCEL FLASH OJT E INDICADORES PONDERADOS */}
-            <div style={{ marginBottom: '1.75rem' }}>
-              <ExcelFlashOjtView filters={filtros} />
+            {/* Sub-Tabs Internos de Operación: Ranking Operativo vs Evolución Diaria */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '1rem',
+              borderBottom: '1px solid var(--border-color)',
+              paddingBottom: '0.5rem'
+            }}>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => setSubVistaOperacion('ranking')}
+                  className="touch-target"
+                  style={{
+                    padding: '0.4rem 0.85rem',
+                    fontSize: '0.8rem',
+                    fontWeight: subVistaOperacion === 'ranking' ? 700 : 500,
+                    color: subVistaOperacion === 'ranking' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    background: subVistaOperacion === 'ranking' ? 'var(--accent-primary-subtle)' : 'transparent',
+                    border: `1px solid ${subVistaOperacion === 'ranking' ? 'rgba(30, 111, 192, 0.25)' : 'transparent'}`,
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Ranking Operativo
+                </button>
+                <button
+                  onClick={() => setSubVistaOperacion('evolucion')}
+                  className="touch-target"
+                  style={{
+                    padding: '0.4rem 0.85rem',
+                    fontSize: '0.8rem',
+                    fontWeight: subVistaOperacion === 'evolucion' ? 700 : 500,
+                    color: subVistaOperacion === 'evolucion' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    background: subVistaOperacion === 'evolucion' ? 'var(--accent-primary-subtle)' : 'transparent',
+                    border: `1px solid ${subVistaOperacion === 'evolucion' ? 'rgba(30, 111, 192, 0.25)' : 'transparent'}`,
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Evolución Diaria (D1-D8)
+                </button>
+              </div>
             </div>
 
             {/* Tabla de Control Operativo con Scorecard / Heatmap */}
@@ -165,24 +229,34 @@ export default function App() {
               <ControlOperativoTabla
                 asesores={data?.matriz?.asesores}
                 onEjecutarDecision={handleAbrirModal}
+                modoVista={subVistaOperacion}
               />
             </div>
-          </>
+          </ErrorBoundary>
         )}
 
         {/* ── PESTAÑA: FORMADOR ── */}
         {vistaActiva === 'formador' && (
-          <FormadorView 
-            data={data} 
-            filtros={filtros} 
-            onAbrirModal={handleAbrirModal} 
-            onNavegarDetalle={handleNavegarADetalle} 
-          />
+          <ErrorBoundary>
+            <FormadorView 
+              data={data} 
+              filtros={filtros} 
+              onAbrirModal={handleAbrirModal} 
+              onNavegarDetalle={handleNavegarADetalle} 
+            />
+          </ErrorBoundary>
         )}
 
         {/* ── PESTAÑA: GERENCIA ── */}
         {vistaActiva === 'gerencia' && (
-          <GerenciaView data={data} roiData={data?.roi} filtros={filtros} />
+          <ErrorBoundary>
+            <GerenciaView 
+              data={data} 
+              roiData={data?.roi} 
+              filtros={filtros} 
+              onNavegarAOperacion={handleNavegarAOperacion}
+            />
+          </ErrorBoundary>
         )}
       </div>
 

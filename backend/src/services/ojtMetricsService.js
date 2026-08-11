@@ -352,11 +352,15 @@ class OjtMetricsService {
     for (let i = 0; i < filteredRows.length; i++) {
       const r = filteredRows[i];
       if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, { max_dia_ojt: 1, max_dia_total: 1, es_iop: 0, es_baja: 0 });
+        asesorMap.set(r.dni, { max_dia_ojt: 0, max_dia_total: 0, es_iop: 0, es_baja: 0, entro_ojt: 0 });
       }
       const a = asesorMap.get(r.dni);
       if (this.isIop(r.sigla, r.estado)) {
         a.es_iop = 1;
+        a.entro_ojt = 1;
+      }
+      if (r.es_ojt_row || r.sigla === 'A' || (r.raw_dia_conexion && r.raw_dia_conexion >= 1)) {
+        a.entro_ojt = 1;
       }
       if (r.es_ojt_row && r.raw_dia_conexion > a.max_dia_ojt) {
         a.max_dia_ojt = r.raw_dia_conexion;
@@ -365,27 +369,57 @@ class OjtMetricsService {
       if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
     }
 
-    const totalUnicos = asesorMap.size;
+    // AUDITORÍA DE INGRESO A OJT: Filtrar solo asesores que llegaron a la etapa OJT
+    const ojtAsesorMap = new Map();
+    let bajasPreOjtCount = 0;
+
+    for (const [dni, info] of asesorMap.entries()) {
+      const llegoAOjt = info.entro_ojt === 1 || info.max_dia_ojt >= 1 || info.es_iop === 1;
+      if (llegoAOjt) {
+        // Garantizar dia_ojt mínimo de 1 para quienes entraron a OJT
+        if (info.max_dia_ojt < 1) info.max_dia_ojt = 1;
+        ojtAsesorMap.set(dni, info);
+      } else if (info.es_baja === 1) {
+        bajasPreOjtCount++;
+      }
+    }
+
+    const totalUnicos = ojtAsesorMap.size || 1;
     const diasData = [];
     const maxDiaGeneral = 15;
 
     for (let d = 1; d <= maxDiaGeneral; d++) {
-      let activos = 0;
-      let bajas = 0;
+      let activosTotal = 0;
+      let activosOjt = 0;
+      let egresadosAcum = 0;
+      let bajasAcum = 0;
 
-      for (const [dni, info] of asesorMap.entries()) {
+      for (const [dni, info] of ojtAsesorMap.entries()) {
         const diaEfectivo = (info.es_iop === 1 && info.max_dia_ojt === 1) ? info.max_dia_total : info.max_dia_ojt;
+        
         if (diaEfectivo >= d) {
-          activos++;
+          activosTotal++;
         }
-        if (info.es_baja === 1 && info.es_iop === 0 && diaEfectivo === d) {
-          bajas++;
+
+        // Categorización exacta usando las reglas unificadas de Supabase
+        if (info.es_iop === 1 && diaEfectivo <= d) {
+          egresadosAcum++;
+        } else if (info.es_baja === 1 && info.es_iop === 0 && diaEfectivo <= d) {
+          bajasAcum++;
+        } else if (diaEfectivo >= d && info.es_iop === 0 && info.es_baja === 0) {
+          activosOjt++;
+        } else if (diaEfectivo >= d && info.es_baja === 1 && diaEfectivo > d) {
+          activosOjt++;
         }
       }
 
-      if (activos === 0 && d > 8) break;
+      if (activosTotal === 0 && d > 8) break;
 
-      const retencion = ((activos / totalUnicos) * 100).toFixed(1);
+      const retencion = ((activosTotal / totalUnicos) * 100).toFixed(1);
+      const activosPct = parseFloat(((activosOjt / totalUnicos) * 100).toFixed(1));
+      const egresadosPct = parseFloat(((egresadosAcum / totalUnicos) * 100).toFixed(1));
+      const bajasPct = parseFloat(((bajasAcum / totalUnicos) * 100).toFixed(1));
+
       let labelText = `Día ${d}`;
       if (d === 1) labelText = `Día 1 (Ingreso Total)`;
       else if (d === 5) labelText = `Día 5 (Base Aprobación)`;
@@ -396,9 +430,14 @@ class OjtMetricsService {
       diasData.push({
         dia: d,
         label: labelText,
-        activos,
-        bajas,
+        activos: activosTotal,
+        activos_ojt: activosOjt,
+        egresados: egresadosAcum,
+        bajas: bajasAcum,
         retencion_pct: parseFloat(retencion),
+        activos_pct: activosPct,
+        egresados_pct: egresadosPct,
+        bajas_pct: bajasPct,
         es_anomalo: d > 8,
         es_max_politica: d === 8
       });
