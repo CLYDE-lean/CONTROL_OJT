@@ -37,15 +37,21 @@ export default function FlashOjtResumenCard({ filters = {}, onNavegarAOperacion 
     return () => { isMounted = false; };
   }, [filters.semana, filters.campana, filters.formador, filters.grupo, filters.modalidad]);
 
-  const resumen = data?.resumen || {};
-  const total = resumen.total_asesores || 0;
-  const aprobadosPct = resumen.aprobados_pct || 0;
-  const ampliadosPct = resumen.ampliados_pct || 0;
-  const desaprobadosPct = resumen.desaprobados_pct || 0;
+  const rc = data?.resumen_condicion || {};
+  const total = rc.total_evaluados || data?.resumen?.total_asesores || 0;
+  const aprobadosPct = total > 0 ? Math.round(((rc.aprobados || 0) / total) * 100) : (data?.resumen?.aprobados_pct || 0);
+  const ampliadosPct = total > 0 ? Math.round(((rc.ampliacion || 0) / total) * 100) : (data?.resumen?.ampliados_pct || 0);
+  const desaprobadosPct = total > 0 ? Math.round(((rc.desaprobados || 0) / total) * 100) : (data?.resumen?.desaprobados_pct || 0);
 
   return (
     <div className="executive-card" style={{
-      padding: '1rem 1.35rem',
+      height: '100%',
+      flex: '1 1 0',
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: 0,
+      overflow: 'hidden',
+      padding: '1rem 1.25rem',
       background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
       border: '1px solid var(--border-color)',
       borderRadius: 'var(--radius-lg)',

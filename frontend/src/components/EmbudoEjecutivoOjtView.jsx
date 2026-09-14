@@ -50,7 +50,7 @@ export default function EmbudoEjecutivoOjtView({ filters = {} }) {
   };
 
   return (
-    <div className="executive-card" style={{ marginBottom: '1.75rem' }}>
+    <div className="executive-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginBottom: 0, padding: '1rem 1.25rem' }}>
       
       {/* HEADER */}
       <div className="card-header-exec" style={{ marginBottom: '1.25rem' }}>

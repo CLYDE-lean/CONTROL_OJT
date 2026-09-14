@@ -18,10 +18,18 @@ export default function EstadoFinalGrupoFormador({ data }) {
     else g.en_capa++;
   });
 
-  const gruposList = Array.from(gruposMap.values()).slice(0, 5);
+  const gruposList = Array.from(gruposMap.values());
 
   return (
-    <div className="executive-card" style={{ padding: '1.25rem' }}>
+    <div className="executive-card" style={{
+      height: '100%',
+      minHeight: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      padding: '1.25rem'
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e8edf5', paddingBottom: '0.75rem' }}>
         <div>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif' }}>
@@ -36,7 +44,7 @@ export default function EstadoFinalGrupoFormador({ data }) {
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
         {gruposList.map((g, idx) => {
           const pctActivos = g.total > 0 ? Math.round((g.activos / g.total) * 100) : 0;
           const pctCapa = g.total > 0 ? Math.round((g.en_capa / g.total) * 100) : 0;

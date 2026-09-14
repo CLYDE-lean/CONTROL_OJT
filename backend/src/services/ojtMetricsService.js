@@ -384,13 +384,14 @@ class OjtMetricsService {
       }
     }
 
-    const totalUnicos = ojtAsesorMap.size || 1;
+    const totalUnicos = asesorMap.size || 945;
     const diasData = [];
     const maxDiaGeneral = 15;
 
     for (let d = 1; d <= maxDiaGeneral; d++) {
       let activosTotal = 0;
-      let activosOjt = 0;
+      let egresadosDia = 0;
+      let bajasDia = 0;
       let egresadosAcum = 0;
       let bajasAcum = 0;
 
@@ -401,24 +402,30 @@ class OjtMetricsService {
           activosTotal++;
         }
 
-        // Categorización exacta usando las reglas unificadas de Supabase
+        // Categorización de Eventos ESPECÍFICOS del Día d
+        if (info.es_iop === 1 && diaEfectivo === d) {
+          egresadosDia++;
+        } else if (info.es_baja === 1 && info.es_iop === 0 && diaEfectivo === d) {
+          bajasDia++;
+        }
+
+        // Categorización Acumulada hasta el Día d
         if (info.es_iop === 1 && diaEfectivo <= d) {
           egresadosAcum++;
         } else if (info.es_baja === 1 && info.es_iop === 0 && diaEfectivo <= d) {
           bajasAcum++;
-        } else if (diaEfectivo >= d && info.es_iop === 0 && info.es_baja === 0) {
-          activosOjt++;
-        } else if (diaEfectivo >= d && info.es_baja === 1 && diaEfectivo > d) {
-          activosOjt++;
         }
       }
+
+      // Activos en OJT que continúan vigentes después del Día d
+      const activosOjt = Math.max(0, activosTotal - egresadosDia - bajasDia);
 
       if (activosTotal === 0 && d > 8) break;
 
       const retencion = ((activosTotal / totalUnicos) * 100).toFixed(1);
       const activosPct = parseFloat(((activosOjt / totalUnicos) * 100).toFixed(1));
-      const egresadosPct = parseFloat(((egresadosAcum / totalUnicos) * 100).toFixed(1));
-      const bajasPct = parseFloat(((bajasAcum / totalUnicos) * 100).toFixed(1));
+      const egresadosPct = parseFloat(((egresadosDia / totalUnicos) * 100).toFixed(1));
+      const bajasPct = parseFloat(((bajasDia / totalUnicos) * 100).toFixed(1));
 
       let labelText = `Día ${d}`;
       if (d === 1) labelText = `Día 1 (Ingreso Total)`;
@@ -430,10 +437,12 @@ class OjtMetricsService {
       diasData.push({
         dia: d,
         label: labelText,
-        activos: activosTotal,
-        activos_ojt: activosOjt,
-        egresados: egresadosAcum,
-        bajas: bajasAcum,
+        activos: activosTotal,          // Total evaluados vigentes el Día d
+        activos_ojt: activosOjt,       // Activos OJT que continúan
+        egresados: egresadosDia,       // Egresados a OP ESPECÍFICAMENTE en el Día d
+        bajas: bajasDia,               // Bajas ESPECÍFICAMENTE en el Día d
+        egresados_acum: egresadosAcum, // Acumulado de egresados hasta Día d
+        bajas_acum: bajasAcum,         // Acumulado de bajas hasta Día d
         retencion_pct: parseFloat(retencion),
         activos_pct: activosPct,
         egresados_pct: egresadosPct,
@@ -698,6 +707,8 @@ class OjtMetricsService {
       let resultadoEvaluacion = 'EN CURSO OJT';
       let estadoActual = 'EN CURSO OJT';
 
+      const requiereRegularizacion = (esIop === 0 && esBaja === 0 && finalDiaOjt === 1);
+
       if (esIop === 1) {
         cuadrante = 'Q4_ALTO_RENDIMIENTO';
         resultadoEvaluacion = '🟢 EGRESADO A OPERACIÓN';
@@ -708,6 +719,11 @@ class OjtMetricsService {
         resultadoEvaluacion = '🔴 BAJA EN OJT';
         accionRecomendada = motivoBaja ? `BAJA: ${motivoBaja}` : 'CESADO EN OJT';
         estadoActual = 'CESADO EN OJT';
+      } else if (requiereRegularizacion) {
+        cuadrante = 'Q3_RIESGO_FUGA';
+        resultadoEvaluacion = '🚨 DESCONEXIÓN D1→D2 (REGULARIZAR)';
+        accionRecomendada = 'AUDITAR: INASISTENCIA O BAJA SIN REGISTRAR';
+        estadoActual = 'PENDIENTE REGULARIZAR';
       } else if (finalDiaOjt > 8) {
         cuadrante = 'Q0_BUCLE_ANOMALO';
         resultadoEvaluacion = '⚠️ CORTE DE POLÍTICA (>8 DÍAS)';
@@ -743,6 +759,8 @@ class OjtMetricsService {
         estado_actual: estadoActual,
         es_baja: esBaja,
         es_iop: esIop,
+        requiere_regularizacion: requiereRegularizacion,
+        es_desconexion_sin_registro: requiereRegularizacion,
         motivo_baja: motivoBaja,
         dias_conexion_ojt: finalDiaOjt,
         dias_ojt_reales: finalDiaOjt,
@@ -820,7 +838,41 @@ class OjtMetricsService {
     }
 
     ranking.sort((a, b) => b.retencion_dia5_pct - a.retencion_dia5_pct);
-    return { success: true, ranking };
+
+    // Calcular totales globales para el Embudo Macro de Conversión
+    let totalUnicos = 0;
+    let totalDia1 = 0;
+    let totalIop = 0;
+    const globalAsesorMap = new Map();
+    const allFiltered = this.filterCache(allData, filters);
+    for (const r of allFiltered) {
+      if (!r.dni) continue;
+      if (!globalAsesorMap.has(r.dni)) {
+        globalAsesorMap.set(r.dni, { max_dia: 0, es_iop: 0 });
+      }
+      const ga = globalAsesorMap.get(r.dni);
+      if (r.dia_conexion > ga.max_dia) ga.max_dia = r.dia_conexion;
+      if (this.isIop(r.sigla, r.estado)) ga.es_iop = 1;
+    }
+    totalUnicos = globalAsesorMap.size;
+    for (const [, ga] of globalAsesorMap.entries()) {
+      if (ga.max_dia >= 1) totalDia1++;
+      if (ga.es_iop === 1) totalIop++;
+    }
+
+    return {
+      success: true,
+      formadores: ranking,
+      embudo: {
+        total_asesores_unicos: totalUnicos,
+        dias_principales_1_8: [{ dia: 1, activos: totalDia1 }],
+        supervivencia: {
+          asistieron: totalUnicos,
+          llegaron_ojt: totalDia1,
+          llegaron_op: totalIop
+        }
+      }
+    };
   }
 
   /**

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BarChart3, ChevronDown, ChevronUp, ShieldAlert, Award, ArrowDownRight } from 'lucide-react';
 
-export default function Embudo5DiasView({ embudoData }) {
+export default function Embudo5DiasView({ embudoData, onAuditarEnTabla }) {
   const [mostrarExcesosHistoricos, setMostrarExcesosHistoricos] = useState(false);
   const [diaHover, setDiaHover] = useState(null);
 
@@ -22,91 +22,155 @@ export default function Embudo5DiasView({ embudoData }) {
   // Calcular total de casos fuera de regla (>8 días)
   const totalCasosExcesos = diasHistoricosExceso.reduce((acc, curr) => acc + (curr.activos || 0), 0);
 
+  const d1Item = diasOficiales.find(d => d.dia === 1);
+  const d2Item = diasOficiales.find(d => d.dia === 2);
+  const caidasD1D2 = (d1Item && d2Item) ? Math.max(0, (d1Item.activos_ojt || 0) - (d2Item.activos || 0)) : 0;
+
   return (
-    <div className="executive-card" style={{ gridColumn: 'span 2' }}>
-      {/* ── Encabezado Principal Directo ── */}
-      <div className="card-header-exec" style={{ marginBottom: '0.4rem' }}>
-        <h2 className="card-title-exec" style={{ fontSize: '1.1rem', fontWeight: 800 }}>
-          <BarChart3 size={18} style={{ color: 'var(--accent-primary)' }} />
-          Embudo de Progresión OJT
+    <div className="executive-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginBottom: 0, padding: '0.65rem 0.95rem' }}>
+      {/* ── Encabezado Principal Directo con Botón Minimalista de Excesos ── */}
+      <div className="card-header-exec" style={{ marginBottom: '0.2rem' }}>
+        <h2 className="card-title-exec" style={{ fontSize: '0.98rem', fontWeight: 800 }}>
+          <BarChart3 size={16} style={{ color: 'var(--accent-primary)' }} />
+          Embudo de Retención y Fuga OJT
         </h2>
-        <span className="badge-exec badge-blue">Nueva Política • Máx 8 Días</span>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span className="badge-exec badge-blue" style={{ fontSize: '0.65rem' }}>Máx 8 Días</span>
+          {diasHistoricosExceso.length > 0 && (
+            <button
+              onClick={() => setMostrarExcesosHistoricos(!mostrarExcesosHistoricos)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                padding: '0.18rem 0.5rem',
+                fontSize: '0.66rem',
+                fontWeight: 700,
+                background: mostrarExcesosHistoricos ? '#dc2626' : '#fff1f2',
+                color: mostrarExcesosHistoricos ? '#ffffff' : '#dc2626',
+                border: '1px solid #fecdd3',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Ver / Ocultar gráfico de casos en exceso de permanencia (>8 Días)"
+            >
+              <ShieldAlert size={12} />
+              <span>+{totalCasosExcesos} Excesos (&gt;8D)</span>
+              {mostrarExcesosHistoricos ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
+        </div>
       </div>
 
-      <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginBottom: '0.9rem' }}>
-        Ventana oficial de <strong>8 Días (5 días base + máximo 3 días de extensión autorizada)</strong>.
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: '0.35rem', margin: 0 }}>
+        Ventana oficial de <strong>8 Días (5 días base + máximo 3 extensión)</strong>.
       </p>
 
-      {/* ── Leyenda Fija de 3 Estados Superior con Banner Interactivo de Hover ── */}
-      {(() => {
-        const diaHoverItem = diaHover ? diasOficiales.find(d => d.dia === diaHover) : null;
-        const hActivos = diaHoverItem ? (diaHoverItem.activos_ojt ?? (diaHoverItem.activos - (diaHoverItem.bajas || 0) - (diaHoverItem.egresados || 0))) : 0;
-        const hEgresados = diaHoverItem?.egresados || 0;
-        const hBajas = diaHoverItem?.bajas || 0;
-        const hTotal = diaHoverItem?.activos || 0;
-
-        return (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '1.25rem',
-            background: diaHoverItem ? 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)' : '#f8fafc',
-            padding: '0.6rem 0.9rem',
-            borderRadius: 'var(--radius-md)',
-            border: `1px solid ${diaHoverItem ? '#93c5fd' : 'var(--border-color)'}`,
-            marginBottom: '1rem',
-            flexWrap: 'wrap',
-            fontSize: '0.78rem',
-            transition: 'all 0.2s ease'
-          }}>
-            {diaHoverItem ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap', width: '100%' }}>
-                <strong style={{ color: '#1e6fc0', fontSize: '0.82rem' }}>📊 {diaHoverItem.label}:</strong>
-                <span style={{ color: '#0d9488', fontWeight: 700 }}>🟢 Activos OJT: <strong>{hActivos}</strong></span>
-                <span style={{ color: '#1e6fc0', fontWeight: 700 }}>🔵 Egresados OP: <strong>{hEgresados}</strong></span>
-                <span style={{ color: '#dc2626', fontWeight: 700 }}>🔴 Cesados/Bajas: <strong>{hBajas}</strong></span>
-                <span style={{ color: '#475569', marginLeft: 'auto', fontWeight: 700 }}>Total Evaluados: <strong>{hTotal}</strong> ({diaHoverItem.retencion_pct}%)</span>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0d9488' }} />
-                    <strong style={{ color: 'var(--text-primary)' }}>Activos en OJT</strong>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#1e6fc0' }} />
-                    <strong style={{ color: 'var(--text-primary)' }}>Egresados a Operación (I-OP)</strong>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }} />
-                    <strong style={{ color: 'var(--text-primary)' }}>Cesados / Bajas</strong>
-                  </div>
-                </div>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>💡 Pasa el cursor o toca cada barra para ver desglose</span>
-              </>
-            )}
+      {/* Banner de Alerta Operativa de Desconexión D1->D2 */}
+      {caidasD1D2 > 0 && (
+        <div style={{
+          background: '#fff1f2',
+          border: '1px solid #fecdd3',
+          borderRadius: '6px',
+          padding: '0.3rem 0.6rem',
+          marginBottom: '0.35rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '0.7rem',
+          color: '#dc2626'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700 }}>
+            <ShieldAlert size={14} color="#dc2626" />
+            <span>Alerta: <strong>{caidasD1D2} asesores con desconexión en Día 2</strong> requieren regularización.</span>
           </div>
-        );
-      })()}
+          <button
+            onClick={onAuditarEnTabla}
+            style={{
+              fontSize: '0.64rem',
+              fontWeight: 700,
+              background: '#ffffff',
+              color: '#dc2626',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              border: '1px solid #fecdd3',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#dc2626';
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#ffffff';
+              e.currentTarget.style.color = '#dc2626';
+            }}
+          >
+            Auditar en Tabla ↓
+          </button>
+        </div>
+      )}
+
+      {/* ── Leyenda Fija Limpia de 3 Estados (Sin Redundancia al Pasar el Mouse) ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '0.75rem',
+        background: '#f8fafc',
+        padding: '0.35rem 0.65rem',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border-color)',
+        marginBottom: '0.45rem',
+        flexWrap: 'wrap',
+        fontSize: '0.72rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#0d9488' }} />
+            <strong style={{ color: 'var(--text-primary)' }}>Activos en OJT</strong>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#1e6fc0' }} />
+            <strong style={{ color: 'var(--text-primary)' }}>Egresados a Operación (I-OP)</strong>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }} />
+            <strong style={{ color: 'var(--text-primary)' }}>Cesados / Bajas del Día</strong>
+          </div>
+        </div>
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)' }}>💡 Pasa el cursor sobre una barra para ver desglose exacto</span>
+      </div>
 
       {/* ── GRÁFICO PRINCIPAL DE BARRAS APILADAS (STACKED BARS DÍAS 1 AL 8) ── */}
-      <div className="embudo-scroll-wrapper">
-        <div className="embudo-grid-cols">
+      <div className="embudo-scroll-wrapper" style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', overflow: 'hidden', marginTop: '0.2rem' }}>
+        
+        {/* Contenedor Superior de Barras con Línea Base Única y Altura Garantizada (145px) */}
+        <div className="embudo-grid-cols" style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(8, 1fr)', 
+          gap: '10px', 
+          alignItems: 'flex-end', 
+          minHeight: '145px',
+          height: '145px',
+          paddingTop: '4px',
+          borderBottom: '2px solid #e2e8f0',
+          position: 'relative'
+        }}>
           {diasOficiales.map((item, idx) => {
             const isDia5 = item.dia === 5;
             const isDia2 = item.dia === 2;
-            const isDia8 = item.dia === 8;
 
             // Datos reales del backend
-            const activosOjt = item.activos_ojt ?? (item.activos - (item.bajas || 0) - (item.egresados || 0));
             const egresadosCount = item.egresados || 0;
             const bajasCount = item.bajas || 0;
             const totalDia = item.activos || 1;
+            const activosOjt = item.activos_ojt ?? Math.max(0, totalDia - egresadosCount - bajasCount);
 
             // Proporciones apiladas de la barra
-            const heightPctTotal = Math.max(12, (totalDia / maxActivos) * 100);
+            const heightPctTotal = Math.max(16, (totalDia / maxActivos) * 100);
             const ojtPct = totalDia > 0 ? (activosOjt / totalDia) * 100 : 0;
             const egresadosBarPct = totalDia > 0 ? (egresadosCount / totalDia) * 100 : 0;
             const bajasBarPct = totalDia > 0 ? (bajasCount / totalDia) * 100 : 0;
@@ -130,73 +194,76 @@ export default function Embudo5DiasView({ embudoData }) {
                   cursor: 'pointer'
                 }}
               >
-                {/* Badge de Caída Día a Día (Step Drop) */}
-                {caidaPts && parseFloat(caidaPts) > 0 && (
+                {/* Indicador Minimalista de Caída (Sin recuadro) */}
+                {caidaPts && parseFloat(caidaPts) > 0 ? (
                   <div style={{
-                    position: 'absolute',
-                    top: '4px',
-                    fontSize: '0.62rem',
-                    color: '#ef4444',
-                    background: '#fff1f2',
-                    border: '1px solid #fecdd3',
-                    borderRadius: '8px',
-                    padding: '1px 4px',
+                    fontSize: '0.64rem',
+                    color: '#dc2626',
                     fontWeight: 700,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '1px',
-                    zIndex: 5
+                    marginBottom: '2px',
+                    whiteSpace: 'nowrap'
                   }}>
                     <ArrowDownRight size={10} />
                     −{caidaPts} pts
                   </div>
+                ) : (
+                  <div style={{ height: '14px' }} />
                 )}
 
                 {/* Tooltip Hover visible con z-index 100 dentro del margen */}
                 {diaHover === item.dia && (
                   <div style={{
                     position: 'absolute',
-                    top: '-32px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: 'rgba(15, 28, 46, 0.96)',
+                    top: '20px',
+                    left: idx === 0 ? '0px' : idx === 7 ? 'auto' : '50%',
+                    right: idx === 7 ? '0px' : 'auto',
+                    transform: (idx === 0 || idx === 7) ? 'none' : 'translateX(-50%)',
+                    background: 'rgba(15, 28, 46, 0.98)',
                     color: '#ffffff',
-                    padding: '0.45rem 0.65rem',
+                    padding: '0.5rem 0.75rem',
                     borderRadius: '8px',
-                    boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
                     zIndex: 100,
-                    fontSize: '0.68rem',
+                    fontSize: '0.72rem',
                     whiteSpace: 'nowrap',
-                    lineHeight: 1.35,
+                    lineHeight: 1.4,
                     pointerEvents: 'none',
-                    border: '1px solid rgba(255,255,255,0.2)'
+                    border: '1px solid rgba(255,255,255,0.25)',
+                    backdropFilter: 'blur(8px)'
                   }}>
-                    <div style={{ fontWeight: 800, color: '#38bdf8' }}>{item.label}</div>
-                    <div style={{ color: '#34d399' }}>🟢 Activos: <strong>{activosOjt}</strong></div>
-                    <div style={{ color: '#60a5fa' }}>🔵 Egresados: <strong>{egresadosCount}</strong></div>
-                    <div style={{ color: '#f87171' }}>🔴 Bajas: <strong>{bajasCount}</strong></div>
+                    <div style={{ fontWeight: 800, color: '#38bdf8', marginBottom: '2px', borderBottom: '1px solid rgba(255,255,255,0.15)', paddingBottom: '2px' }}>
+                      {item.label}
+                    </div>
+                    <div style={{ color: '#34d399', fontWeight: 700 }}>🟢 Activos OJT: {activosOjt}</div>
+                    <div style={{ color: '#60a5fa', fontWeight: 700 }}>🔵 Egresados OP (Día {item.dia}): {egresadosCount}</div>
+                    <div style={{ color: '#f87171', fontWeight: 700 }}>🔴 Bajas (Día {item.dia}): {bajasCount}</div>
+                    <div style={{ fontSize: '0.66rem', color: '#cbd5e1', marginTop: '3px', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '3px' }}>
+                      Sumatoria: {activosOjt} + {egresadosCount} + {bajasCount} = <strong style={{ color: '#ffffff' }}>{totalDia}</strong>
+                    </div>
                   </div>
                 )}
 
                 {/* Cifra de Asesores & Retención % */}
-                <div style={{ fontSize: '0.72rem', textAlign: 'center', marginBottom: '0.35rem', color: isDia2 ? '#1e6fc0' : 'var(--text-secondary)' }}>
-                  <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.88rem' }}>{item.activos}</strong>
-                  <span>{item.retencion_pct}%</span>
+                <div style={{ fontSize: '0.68rem', textAlign: 'center', marginBottom: '0.25rem', color: isDia2 ? '#1e6fc0' : 'var(--text-secondary)', zIndex: 2 }}>
+                  <strong style={{ display: 'block', color: '#0f1c2e', fontSize: '0.88rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{item.activos}</strong>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: isDia5 ? '#0d9488' : isDia2 ? '#1e6fc0' : '#64748b' }}>{item.retencion_pct}%</span>
                 </div>
 
-                {/* Barra Apilada (Stacked Bar Vertical) */}
+                {/* Barra Apilada (Stacked Bar Vertical con porcentaje real) */}
                 <div style={{
                   width: '100%',
-                  maxWidth: '42px',
-                  height: `${heightPctTotal * 0.7}px`,
-                  maxHeight: '75px',
-                  minHeight: '14px',
-                  borderRadius: '4px',
+                  maxWidth: '54px',
+                  height: `${heightPctTotal}%`,
+                  borderRadius: '6px 6px 0 0',
                   overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  boxShadow: isDia2 ? '0 0 8px rgba(30,111,192,0.25)' : isDia5 ? '0 0 10px rgba(13,148,136,0.3)' : undefined,
-                  border: isDia5 ? '1.5px solid #0d9488' : '1px solid rgba(0,0,0,0.08)'
+                  boxShadow: isDia2 ? '0 0 10px rgba(30,111,192,0.25)' : isDia5 ? '0 0 12px rgba(13,148,136,0.3)' : '0 2px 6px rgba(0,0,0,0.06)',
+                  border: isDia5 ? '1.5px solid #0d9488' : '1px solid rgba(0,0,0,0.08)',
+                  borderBottom: 'none'
                 }}>
                   {/* Segmento Verde (Activos en OJT) */}
                   {ojtPct > 0 && (
@@ -225,65 +292,100 @@ export default function Embudo5DiasView({ embudoData }) {
                     }} title={`Bajas: ${bajasCount}`} />
                   )}
                 </div>
-
-                {/* Etiqueta Inferior con Hito Destacado Día 5 */}
-                <div style={{ marginTop: '0.55rem', textAlign: 'center' }}>
-                  <span className={`badge-exec ${isDia8 ? 'badge-red' : isDia5 ? 'badge-green' : isDia2 ? 'badge-amber' : 'badge-neutral'}`} style={{ fontSize: '0.67rem', padding: '0.18rem 0.4rem', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                    {isDia5 && <Award size={12} style={{ color: '#0d9488' }} />}
-                    {item.label}
-                  </span>
-                  {isDia2 && <span style={{ display: 'block', fontSize: '0.62rem', color: '#d97706', fontWeight: 700, marginTop: '2px' }}>Día Clave</span>}
-                  {isDia5 && <span style={{ display: 'block', fontSize: '0.62rem', color: '#0d9488', fontWeight: 800, marginTop: '2px' }}>⭐ Base Aprobación</span>}
-                  {isDia8 && <span style={{ display: 'block', fontSize: '0.62rem', color: '#dc2626', fontWeight: 700, marginTop: '2px' }}>Límite Máx</span>}
-                </div>
               </div>
             );
           })}
         </div>
+
+        {/* Eje de Etiquetas Minimalista Inferior (Fuera del contenedor de barras, totalmente plano) */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(8, 1fr)', 
+          gap: '10px', 
+          paddingTop: '0.35rem',
+          paddingBottom: '0.15rem'
+        }}>
+          {diasOficiales.map((item) => {
+            const isDia5 = item.dia === 5;
+            const isDia2 = item.dia === 2;
+            const isDia8 = item.dia === 8;
+
+            let colorPrincipal = '#475569';
+            let colorSub = '#7a90ad';
+            let labelText = item.label;
+            let subText = null;
+
+            if (item.dia === 1) {
+              labelText = 'DÍA 1';
+              subText = 'Ingreso Total';
+            } else if (isDia2) {
+              colorPrincipal = '#1e6fc0';
+              colorSub = '#d97706';
+              labelText = 'DÍA 2';
+              subText = 'Día Clave';
+            } else if (item.dia === 3) {
+              labelText = 'DÍA 3';
+            } else if (item.dia === 4) {
+              labelText = 'DÍA 4';
+            } else if (isDia5) {
+              colorPrincipal = '#0d9488';
+              colorSub = '#0d9488';
+              labelText = 'DÍA 5';
+              subText = 'Base Aprobación';
+            } else if (item.dia === 6) {
+              labelText = 'DÍA 6';
+              subText = '+1 Ext';
+            } else if (item.dia === 7) {
+              labelText = 'DÍA 7';
+              subText = '+2 Ext';
+            } else if (isDia8) {
+              colorPrincipal = '#dc2626';
+              colorSub = '#dc2626';
+              labelText = 'DÍA 8';
+              subText = 'Límite Máx';
+            }
+
+            return (
+              <div key={`label-${item.dia}`} style={{ textAlign: 'center', lineHeight: 1.2 }}>
+                <span style={{ 
+                  fontSize: '0.72rem', 
+                  fontWeight: (isDia2 || isDia5 || isDia8) ? 800 : 700, 
+                  color: colorPrincipal,
+                  display: 'block'
+                }}>
+                  {labelText}
+                </span>
+                {subText && (
+                  <span style={{ 
+                    fontSize: '0.61rem', 
+                    fontWeight: 600, 
+                    color: colorSub,
+                    display: 'block',
+                    marginTop: '1px'
+                  }}>
+                    {subText}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
       </div>
 
-      {/* BOTÓN Y SECCIÓN DESPLEGABLE PARA EXCESOS HISTÓRICOS CON CONTADOR EN VIVO */}
-      {diasHistoricosExceso.length > 0 && (
-        <div style={{ marginTop: '1.1rem' }}>
-          <button 
-            onClick={() => setMostrarExcesosHistoricos(!mostrarExcesosHistoricos)}
-            className="btn-exec touch-target"
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              padding: '0.65rem',
-              background: 'rgba(239, 68, 68, 0.05)',
-              border: '1px dashed rgba(239, 68, 68, 0.4)',
-              color: '#dc2626',
-              fontWeight: 700,
-              fontSize: '0.8rem'
-            }}
-          >
-            <ShieldAlert size={16} />
-            <span>
-              {mostrarExcesosHistoricos 
-                ? 'Ocultar Gráfico de Excesos Históricos' 
-                : `Ver Gráfico de Registros Anteriores (>8 Días hasta el Día ${max_dia_detectado}+) [ +${totalCasosExcesos} casos fuera de regla ]`}
-            </span>
-            {mostrarExcesosHistoricos ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-
-          {/* SEGUNDO GRÁFICO DE BARRAS HORIZONTAL PARA REGISTROS ANTERIORES (>8 DÍAS) */}
-          {mostrarExcesosHistoricos && (
-            <div style={{
-              marginTop: '0.85rem',
-              padding: '1.25rem 1rem',
-              background: 'rgba(239, 68, 68, 0.03)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: 'var(--radius-md)'
-            }}>
-              <div style={{ fontSize: '0.8rem', color: '#dc2626', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <ShieldAlert size={14} />
-                <span>Gráfico Histórico de Excesos de Permanencia (Violación de la Política de 8 Días)</span>
-              </div>
+      {/* SECCIÓN DESPLEGABLE PARA EXCESOS HISTÓRICOS (>8 DÍAS) (Activada desde el botón minimalista del header) */}
+      {diasHistoricosExceso.length > 0 && mostrarExcesosHistoricos && (
+        <div style={{ marginTop: '0.4rem' }}>
+          <div style={{
+            padding: '0.75rem 0.85rem',
+            background: 'rgba(239, 68, 68, 0.03)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: 'var(--radius-md)'
+          }}>
+            <div style={{ fontSize: '0.8rem', color: '#dc2626', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <ShieldAlert size={14} />
+              <span>Gráfico Histórico de Excesos de Permanencia (Violación de la Política de 8 Días)</span>
+            </div>
 
               <div style={{
                 display: 'grid',
@@ -323,22 +425,6 @@ export default function Embudo5DiasView({ embudoData }) {
                 })}
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {analisis && (
-        <div style={{
-          marginTop: '1rem',
-          padding: '0.65rem 0.85rem',
-          borderRadius: 'var(--radius-md)',
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid var(--border-color)',
-          fontSize: '0.75rem',
-          color: 'var(--text-tertiary)'
-        }}>
-          <strong style={{ color: 'var(--text-primary)' }}>Política de Operación: </strong>
-          {analisis.diagnostico}. {analisis.recomendacion}
         </div>
       )}
     </div>

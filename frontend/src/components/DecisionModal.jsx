@@ -57,6 +57,28 @@ export default function DecisionModal({ modalData, onClose, onConfirm }) {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {modalData.accion?.includes('Regularizar') && (
+            <div style={{ marginBottom: '1rem', background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#0f1c2e', marginBottom: '0.4rem' }}>
+                Selecciona Tipo de Regularización:
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.78rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}>
+                  <input type="radio" name="tipo_reg" value="🔴 Registrar Baja Formal por Inasistencia" defaultChecked onChange={(e) => setMotivo(e.target.value)} />
+                  🔴 Registrar Baja Formal (Deserción D1→D2)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#0d9488', fontWeight: 600 }}>
+                  <input type="radio" name="tipo_reg" value="🟢 Regularizar Asistencia / Vigencia en OJT" onChange={(e) => setMotivo(e.target.value)} />
+                  🟢 Regularizar Asistencia (Asesor Vigente en OJT)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: '#1e6fc0', fontWeight: 600 }}>
+                  <input type="radio" name="tipo_reg" value="🔵 Egresar a Operación (I-OP Directo)" onChange={(e) => setMotivo(e.target.value)} />
+                  🔵 Egresar a Operación (I-OP Directo)
+                </label>
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-tertiary)', marginBottom: '0.4rem' }}>
               Justificación / Sustento Operativo:
@@ -65,7 +87,7 @@ export default function DecisionModal({ modalData, onClose, onConfirm }) {
               rows="3"
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Ej: Evaluación de Día 2 completada. Aplica protocolo de intervención."
+              placeholder="Ej: Auditoría de asistencia completada por Supervisor."
               style={{
                 width: '100%',
                 padding: '0.65rem 0.75rem',

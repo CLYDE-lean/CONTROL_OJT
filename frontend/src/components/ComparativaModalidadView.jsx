@@ -49,7 +49,7 @@ export default function ComparativaModalidadView({ filtros = {} }) {
     : 0;
 
   return (
-    <div className="executive-card" style={{ marginBottom: '1.75rem' }}>
+    <div className="executive-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginBottom: 0, padding: '1rem 1.25rem' }}>
       
       {/* Header Narrativo */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', paddingBottom: '0.85rem', borderBottom: '1px solid #e8edf5' }}>

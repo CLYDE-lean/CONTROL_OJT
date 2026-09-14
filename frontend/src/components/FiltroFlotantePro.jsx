@@ -4,6 +4,7 @@ import {
   RotateCcw, Sparkles, Database, Calendar, Users, Target, 
   Briefcase, Layers, CheckCircle2, Search
 } from 'lucide-react';
+import GEA_LOGO_URL from '../assets/geaLogoAsset.js';
 
 /**
  * Componente FiltroFlotantePro
@@ -194,16 +195,16 @@ export default function FiltroFlotantePro({
           borderBottom: '1px solid rgba(255,255,255,0.08)'
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Filter size={18} style={{ color: '#38bdf8' }} />
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0, color: '#f8fafc' }}>
-                Filtros en Cascada DB
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <img src={GEA_LOGO_URL} alt="GEA PERÚ" style={{ width: '22px', height: '22px', borderRadius: '4px', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.3)' }} />
+              <h3 style={{ fontSize: '1.02rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0, color: '#f8fafc' }}>
+                GEA PERÚ · Filtros BI
               </h3>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.25rem' }}>
               <Database size={12} style={{ color: '#4ade80' }} />
               <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>
-                Conectado a In-Memory Cache (Supabase)
+                Supabase Cache · GEA PIENSA EN TI
               </span>
             </div>
           </div>

@@ -1,74 +1,155 @@
 import React from 'react';
-import { Users, Award, TrendingUp, AlertTriangle, Layers } from 'lucide-react';
-import MatrizRiesgoEficienciaFormadoresView from './MatrizRiesgoEficienciaFormadoresView';
-import EmbudoSupervivenciaGrupo from './EmbudoSupervivenciaGrupo';
+import { Users, Award, TrendingUp, AlertTriangle } from 'lucide-react';
+import AutoFitStage from './AutoFitStage';
+import ScatterVolumenVsCalidad from './ScatterVolumenVsCalidad';
 import EstadoFinalGrupoFormador from './EstadoFinalGrupoFormador';
-import CurvaAprendizajeSemana from './CurvaAprendizajeSemana';
-import ReglasDeOroCard from './ReglasDeOroCard';
-import EmbudoEjecutivoOjtView from './EmbudoEjecutivoOjtView';
+import ExcelFlashOjtView from './ExcelFlashOjtView';
 
 export default function FormadorView({ data, filtros, onAbrirModal, onNavegarDetalle }) {
   const embudo = data?.embudo;
-  const total  = embudo?.total_asesores_unicos || 0;
-  const dia5   = embudo?.dias_principales_1_8?.find(d => d.dia === 5)?.activos || 0;
-  const dia1   = embudo?.dias_principales_1_8?.find(d => d.dia === 1)?.activos || total;
-  const bajas  = dia1 - dia5;
-  const tasa   = dia1 > 0 ? Math.round((dia5 / dia1) * 100) : 0;
+  const listAsesores = data?.matriz?.asesores || [];
+  
+  // Total viene del backend. Sin datos del backend = 0 (nunca número estático)
+  const total = embudo?.total_asesores_unicos || listAsesores.length || 0;
+  const egresadosOp = listAsesores.length > 0
+    ? listAsesores.filter(a => {
+        const r = (a.resultado_evaluacion || a.estado_actual || a.accion_recomendada || '').toUpperCase();
+        return r.includes('APROBADO') || r.includes('EGRESADO') || r.includes('OPERACI') || a.es_iop === 1;
+      }).length
+    : (embudo?.flujo?.total_egresados_op ?? data?.flujo?.total_egresados_op ?? 0);
+  
+  const bajas = total - egresadosOp;
+  const tasaOp = total > 0 ? Math.round((egresadosOp / total) * 100) : 0;
 
   return (
-    <div>
-      {/* ── KPIs rápidos del formador ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-        <KpiCard label="Total Ingresaron"    valor={total.toLocaleString()}   icon={Users}          color="#1e6fc0" sub="Día 1" />
-        <KpiCard label="Llegaron al Día 5"   valor={dia5.toLocaleString()}    icon={Award}          color="#0d9488" sub={`${tasa}% del total`} />
-        <KpiCard label="Bajas en el proceso" valor={bajas.toLocaleString()}   icon={AlertTriangle}  color="#dc2626" sub="No llegaron a Día 5" />
-        <KpiCard label="Tasa de Retención"   valor={`${tasa}%`}              icon={TrendingUp}     color={tasa >= 55 ? '#0d9488' : tasa >= 35 ? '#d97706' : '#dc2626'} sub="al Día 5 (meta 55%)" />
-      </div>
+    <AutoFitStage>
+      <div className="formador-layout">
+        {/* ── Fila 1 (Auto): KPIs del Formador Seleccionado ── */}
+        <div className="kpi-header-grid">
+          {/* Card 1: TOTAL INGRESARON */}
+          <div className="kpi-card" style={{ 
+            position: 'relative', 
+            overflow: 'hidden', 
+            borderLeft: '4px solid #1e6fc0', 
+            padding: '10px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1 }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.01em' }}>TOTAL INGRESARON</span>
+              <Users size={16} style={{ color: '#1e6fc0' }} />
+            </div>
+            <div style={{ fontSize: '2.1rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif', lineHeight: 1.1, margin: '3px 0', zIndex: 1 }}>
+              {total.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#7a90ad', fontWeight: 500, zIndex: 1 }}>
+              en día 1
+            </div>
+            <Users size={70} style={{ position: 'absolute', right: '-12px', bottom: '-15px', color: '#1e6fc0', opacity: 0.09, pointerEvents: 'none' }} />
+          </div>
 
-      {/* ── Embudo Ejecutivo de Conversión de 3 Etapas (Movidio a Rendimiento) ── */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <EmbudoEjecutivoOjtView filters={filtros} />
-      </div>
+          {/* Card 2: INGRESARON A OPERACIÓN (I-OP) */}
+          <div className="kpi-card" style={{ 
+            position: 'relative', 
+            overflow: 'hidden', 
+            borderLeft: '4px solid #0d9488', 
+            padding: '10px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1 }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.01em' }}>INGRESARON A OPERACIÓN (I-OP)</span>
+              <Award size={16} style={{ color: '#0d9488' }} />
+            </div>
+            <div style={{ fontSize: '2.1rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif', lineHeight: 1.1, margin: '3px 0', zIndex: 1 }}>
+              {egresadosOp.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.73rem', color: '#7a90ad', fontWeight: 500, zIndex: 1 }}>
+              personas únicas por DNI ({tasaOp}%)
+            </div>
+            <Award size={70} style={{ position: 'absolute', right: '-12px', bottom: '-15px', color: '#0d9488', opacity: 0.09, pointerEvents: 'none' }} />
+          </div>
 
-      {/* ── Embudo de Supervivencia del Grupo ── */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <EmbudoSupervivenciaGrupo data={data} onNavegarDetalle={onNavegarDetalle} />
-      </div>
+          {/* Card 3: BAJAS OJT */}
+          <div className="kpi-card" style={{ 
+            position: 'relative', 
+            overflow: 'hidden', 
+            borderLeft: '4px solid #dc2626', 
+            padding: '10px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1 }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.01em' }}>BAJAS OJT</span>
+              <AlertTriangle size={16} style={{ color: '#dc2626' }} />
+            </div>
+            <div style={{ fontSize: '2.1rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif', lineHeight: 1.1, margin: '3px 0', zIndex: 1 }}>
+              {bajas.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#7a90ad', fontWeight: 500, zIndex: 1 }}>
+              no llegaron a D5
+            </div>
+            <AlertTriangle size={75} style={{ position: 'absolute', right: '-10px', bottom: '-16px', color: '#dc2626', opacity: 0.1, pointerEvents: 'none' }} />
+          </div>
 
-      {/* ── Estado Final por Grupo y Formador & Curva de Aprendizaje ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
-        <EstadoFinalGrupoFormador data={data} />
-        <CurvaAprendizajeSemana data={data} filters={filtros} />
-      </div>
+          {/* Card 4: TASA DE RETENCIÓN */}
+          <div className="kpi-card" style={{ 
+            position: 'relative', 
+            overflow: 'hidden', 
+            borderLeft: '4px solid #4f46e5', 
+            padding: '10px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1 }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.01em' }}>TASA DE RETENCIÓN</span>
+              <TrendingUp size={16} style={{ color: '#4f46e5' }} />
+            </div>
+            <div style={{ fontSize: '2.1rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif', lineHeight: 1.1, margin: '3px 0', zIndex: 1 }}>
+              {tasaOp}%
+            </div>
+            <div style={{ fontSize: '0.74rem', color: '#7a90ad', fontWeight: 500, zIndex: 1 }}>
+              meta al día 5: 55%
+            </div>
+            <TrendingUp size={75} style={{ position: 'absolute', right: '-10px', bottom: '-16px', color: '#4f46e5', opacity: 0.09, pointerEvents: 'none' }} />
+          </div>
+        </div>
 
-      {/* ── Matriz de Riesgo y Eficiencia por Formador ── */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <MatrizRiesgoEficienciaFormadoresView filtros={filtros} />
+        {/* ── Fila 2 (1fr): Grid Asimétrico Espacioso 2 Columnas (Matriz a la Izquierda) ── */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1.38fr 1fr',
+          gap: '12px',
+          height: '100%',
+          minHeight: 0
+        }}>
+          {/* Columna Izquierda Destacada: Matriz de Desempeño (Volumen vs. Calidad) */}
+          <div className="chart-wrapper-flex chart-card-scatter" style={{ height: '100%', minHeight: 0 }}>
+            <ScatterVolumenVsCalidad data={data} />
+          </div>
+
+          {/* Columna Derecha: Estado Final + Indicadores Excel Flash OJT */}
+          <div style={{
+            display: 'grid',
+            gridTemplateRows: '1fr 1fr',
+            gap: '12px',
+            height: '100%',
+            minHeight: 0
+          }}>
+            <div className="chart-wrapper-flex chart-card-heatmap" style={{ height: '100%', minHeight: 0 }}>
+              <EstadoFinalGrupoFormador data={data} />
+            </div>
+            <div className="chart-wrapper-flex chart-card-excel" style={{ height: '100%', minHeight: 0 }}>
+              <ExcelFlashOjtView filters={filtros} />
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </AutoFitStage>
   );
 }
 
-function KpiCard({ label, valor, sub, icon: Icon, color }) {
-  return (
-    <div style={{
-      background: '#fff',
-      border: '1px solid #e8edf5',
-      borderTop: `3px solid ${color}`,
-      borderRadius: '12px',
-      padding: '1.1rem',
-      boxShadow: '0 1px 6px rgba(0,0,0,0.04)'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#7a90ad', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          {label}
-        </span>
-        <Icon size={16} style={{ color }} />
-      </div>
-      <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>
-        {valor}
-      </div>
-      <div style={{ fontSize: '0.73rem', color: '#7a90ad', marginTop: '0.3rem' }}>{sub}</div>
-    </div>
-  );
-}

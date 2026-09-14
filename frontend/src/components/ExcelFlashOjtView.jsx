@@ -49,16 +49,7 @@ export default function ExcelFlashOjtView({ filters = {} }) {
   const semaforoDesercionColor = des.semaforo === 'VERDE' ? '#0d9488' : des.semaforo === 'AMARILLO' ? '#d97706' : '#dc2626';
 
   return (
-    <div className="executive-card" style={{ gridColumn: 'span 2', marginBottom: '1.75rem' }}>
-      
-      {/* ── HEADER DEL CUADRO EXCEL FLASH ── */}
-      <div className="card-header-exec" style={{ marginBottom: '1.25rem' }}>
-        <h2 className="card-title-exec">
-          <Target size={18} style={{ color: '#1e6fc0' }} />
-          Cuadro de Control Flash OJT (Metas & Condición Excel)
-        </h2>
-        <span className="badge-exec badge-blue">Reglas de Negocio Excel</span>
-      </div>
+    <div className="executive-card" style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto', marginBottom: 0, padding: '0.85rem 1rem' }}>
 
       {/* ── GRID DE 2 COLUMNAS: TABLA DE INDICADORES + CONDICIÓN DE NOTA ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1.5rem', marginBottom: '1.5rem' }}>

@@ -7,7 +7,7 @@ export default function RadarPerfilExitoSegmento({ data }) {
   ];
 
   return (
-    <div className="executive-card" style={{ padding: '1.25rem' }}>
+    <div className="executive-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginBottom: 0, padding: '1rem 1.25rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e8edf5', paddingBottom: '0.75rem' }}>
         <div>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'Outfit, sans-serif' }}>
@@ -17,8 +17,8 @@ export default function RadarPerfilExitoSegmento({ data }) {
             Compara visualmente el perfil de éxito entre segmentos en KPIs vs. Retención
           </p>
         </div>
-        <span style={{ fontSize: '0.7rem', background: '#f0fdf4', color: '#166534', padding: '0.25rem 0.6rem', borderRadius: '6px', fontWeight: 700 }}>
-          RADAR CHART
+        <span style={{ fontSize: '0.7rem', background: '#eff6ff', color: '#1e6fc0', border: '1px solid #bfdbfe', padding: '0.25rem 0.6rem', borderRadius: '6px', fontWeight: 700 }}>
+          Comparativa de Segmentos
         </span>
       </div>
 

@@ -53,7 +53,7 @@ export default function HeatmapBajasView({ filters = {} }) {
   const tieneMasMotivos = motivos.length > 3;
 
   return (
-    <div className="executive-card" style={{ gridColumn: 'span 1' }}>
+    <div className="executive-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginBottom: 0, padding: '1rem 1.25rem' }}>
       <div className="card-header-exec">
         <h2 className="card-title-exec">
           <ShieldAlert size={18} style={{ color: '#ef4444' }} />

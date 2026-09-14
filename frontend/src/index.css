@@ -58,17 +58,19 @@
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body {
-  overflow-x: hidden;
-  width: 100%;
+html, body, #root {
+  overflow: hidden !important;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
 }
 
 body {
   background-color: var(--bg-body);
   color: var(--text-primary);
   font-family: var(--font-main);
-  min-height: 100vh;
-  min-height: 100dvh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -737,5 +739,346 @@ td.sticky-left, th.sticky-left {
   }
 }
 
+/* ==========================================================================
+   SINGLE-PANE POWER BI / LOOKER LAYOUT SYSTEM (FIXED VIEWPORT)
+   ========================================================================== */
 
+.dashboard-container {
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  background-color: var(--bg-body);
+}
+
+.top-bar-wrapper {
+  padding: 8px 16px 0px 16px;
+  background: var(--bg-body);
+  z-index: 900;
+}
+
+.vista-content {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  display: grid;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* ── Layouts por Vista ── */
+.operacion-layout {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 6px 16px 14px 16px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.operacion-ranking-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.formador-layout {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 6px 16px 14px 16px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.formador-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gerencia-layout {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 6px 16px 14px 16px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.gerencia-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Modificadores de Grid Dinámico ── */
+.span-2-cols { grid-column: span 2 !important; }
+.span-2-rows { grid-row: span 2 !important; }
+
+/* ── Wrapper para Recharts Fix (Flexbox) ── */
+.chart-wrapper-flex {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Row de KPIs Compactos (Auto Row Height) ── */
+.kpi-header-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  height: 100%;
+  align-items: stretch;
+}
+
+.kpi-card {
+  height: 100%;
+  min-height: 78px;
+  padding: 6px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.kpi-valor {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+  margin: 1px 0;
+}
+
+.kpi-subtexto {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  line-height: 1.2;
+  font-weight: 500;
+}
+
+/* ── Tabla Wrapper & Sticky Header Fix ── */
+.tabla-asesores-wrapper {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  box-sizing: border-box;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.tabla-asesores-wrapper table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tabla-asesores-wrapper th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f1f5f9 !important;
+  border-bottom: 2px solid var(--border-color);
+}
+
+/* ── Badges Pill Component ── */
+.badge-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-status-verde {
+  background: #f0fdfa;
+  color: #0d9488;
+  border: 1px solid #99f6e4;
+}
+
+.badge-status-amber {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.badge-status-rojo {
+  background: #fff1f2;
+  color: #dc2626;
+  border: 1px solid #fecdd3;
+}
+
+.badge-status-blue {
+  background: #eff6ff;
+  color: #1e6fc0;
+  border: 1px solid #bfdbfe;
+}
+
+/* ==========================================================================
+   SINGLE-PANE POWER BI / LOOKER VIEWPORT SYSTEM (100% STATIC VIEWPORT)
+   ========================================================================== */
+
+.dashboard-container {
+  height: 100vh !important;
+  height: 100dvh !important;
+  width: 100vw !important;
+  display: grid !important;
+  grid-template-rows: auto 1fr !important;
+  overflow: hidden !important;
+  background-color: var(--bg-body);
+}
+
+.top-bar-wrapper {
+  padding: 8px 16px 0px 16px;
+  background: var(--bg-body);
+  z-index: 900;
+  flex-shrink: 0;
+}
+
+.vista-content {
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  box-sizing: border-box;
+}
+
+/* ── Layouts de Vista (Dimensiones Base Un-scaled para AutoFitStage) ── */
+.operacion-layout,
+.gerencia-layout,
+.formador-layout {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 6px 16px 14px 16px;
+  width: 100%;
+  height: max-content;
+  box-sizing: border-box;
+}
+
+.operacion-ranking-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.formador-grid-2x2,
+.gerencia-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── System Architecture AutoFitStage ── */
+.autofit-stage {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.autofit-stage__inner {
+  width: 100%;
+  height: max-content;
+  transform-origin: top center;
+  will-change: transform;
+}
+
+/* Fallback Scroll solo si la pantalla es extremadamente pequeña (scale < 0.78) */
+.autofit-stage.is-fallback {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.autofit-stage.is-fallback .autofit-stage__inner {
+  transform: none !important;
+  height: auto !important;
+  will-change: auto !important;
+  padding-bottom: max(80px, env(safe-area-inset-bottom, 80px));
+}
+
+.autofit-stage.is-fallback .operacion-layout,
+.autofit-stage.is-fallback .gerencia-layout,
+.autofit-stage.is-fallback .formador-layout {
+  height: auto !important;
+  min-height: auto !important;
+}
+
+/* ── Breakpoints para Pantallas Pequeñas (Adaptación de Columnas) ── */
+@media (max-width: 1024px) {
+  .gerencia-grid-2x2, .formador-grid-2x2 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .operacion-ranking-grid {
+    grid-template-columns: 1fr;
+  }
+  .span-2-cols {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .formador-grid-2x2, .gerencia-grid-2x2 {
+    grid-template-columns: 1fr;
+  }
+  .span-2-cols {
+    grid-column: span 1 !important;
+  }
+  .kpi-header-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-header-grid {
+    grid-template-columns: 1fr;
+  }
+}
 

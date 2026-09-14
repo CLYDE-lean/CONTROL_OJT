@@ -50,7 +50,7 @@ const startServer = (portToUse) => {
     console.log(`   - GET /api/ojt/filtros-disponibles`);
     console.log('===========================================================');
 
-    // Auto-test de conexión y campañas disponibles en Supabase
+    // Auto-test de conexión y campañas disponibles en Supabase (via pg pool)
     try {
       const db = require('./config/database');
       const testRes = await db.query(`
@@ -61,11 +61,19 @@ const startServer = (portToUse) => {
         ORDER BY total DESC
         LIMIT 5;
       `);
-      console.log('✅ Conexión a Supabase exitosa. Campañas reales en la BD:');
+      console.log('✅ Conexión Supabase (pg pool) exitosa. Campañas en BD:');
       testRes.rows.forEach(r => console.log(`   • "${r.c}" — ${r.total} registros`));
     } catch (err) {
-      console.error('❌ Error conectando a Supabase:', err.message);
+      console.error('❌ Error pg pool Supabase:', err.message);
       console.error('   → Verifica el archivo backend/.env y la variable DATABASE_URL_SUPABASE');
+    }
+
+    // Auto-test del cliente Supabase JS
+    try {
+      const { testSupabaseConnection } = require('./config/supabase');
+      await testSupabaseConnection();
+    } catch (err) {
+      console.error('❌ Error cliente Supabase JS:', err.message);
     }
   });
 

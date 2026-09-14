@@ -8,7 +8,7 @@ export default function RoiExtensionesView({ roiData }) {
   const isPositivo = metricas.tasa_exito_extension_pct >= 60;
 
   return (
-    <div className="executive-card">
+    <div className="executive-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginBottom: 0, padding: '1rem 1.25rem' }}>
       <div className="card-header-exec">
         <h2 className="card-title-exec">
           <TrendingUp size={18} style={{ color: 'var(--accent-primary)' }} />

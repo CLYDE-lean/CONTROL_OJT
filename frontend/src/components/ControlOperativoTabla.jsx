@@ -1,13 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Table, Search, CheckCircle2, XCircle, Clock, BookOpen, Target, ChevronRight } from 'lucide-react';
 import AsesorDetalleDrawer from './AsesorDetalleDrawer';
 
-export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) {
+function Sparkline({ data, target = 70, isLowerBetter = false, width = 45, height = 16 }) {
+  if (!data || !Array.isArray(data) || data.length === 0) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data.map((val, idx) => {
+    const x = (idx / (data.length - 1 || 1)) * width;
+    const y = height - ((val - min) / range) * (height - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const lastVal = data[data.length - 1];
+  const isGood = isLowerBetter ? lastVal <= target : lastVal >= target;
+  const strokeColor = isGood ? '#0d9488' : '#dc2626';
+
+  return (
+    <svg width={width} height={height} style={{ overflow: 'visible', display: 'inline-block' }}>
+      <polyline
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+      {points.length > 0 && (() => {
+        const lastPt = points.split(' ').pop().split(',');
+        return (
+          <circle
+            cx={lastPt[0]}
+            cy={lastPt[1]}
+            r="2"
+            fill={strokeColor}
+          />
+        );
+      })()}
+    </svg>
+  );
+}
+
+export default function ControlOperativoTabla({ asesores, onEjecutarDecision, filtroInicial }) {
   const [busqueda, setBusqueda] = useState('');
   const [filtroDia, setFiltroDia] = useState('');
-  const [filtroResultado, setFiltroResultado] = useState('');
+  const [filtroResultado, setFiltroResultado] = useState(filtroInicial || '');
   const [ordenarPor, setOrdenarPor] = useState('calidad');
   const [asesorSeleccionado, setAsesorSeleccionado] = useState(null);
+
+  useEffect(() => {
+    if (filtroInicial) {
+      setFiltroResultado(filtroInicial);
+    }
+  }, [filtroInicial]);
 
   if (!asesores) return null;
 
@@ -34,7 +80,9 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
     const resultado = (a.resultado_evaluacion || a.estado_actual || a.accion_recomendada || '').toUpperCase();
     let matchResultado = true;
 
-    if (filtroResultado === 'APROBADO') {
+    if (filtroResultado === 'DESCONEXION') {
+      matchResultado = a.requiere_regularizacion || a.es_desconexion_sin_registro || (a.resultado_evaluacion || '').includes('REGULARIZAR');
+    } else if (filtroResultado === 'APROBADO') {
       matchResultado = resultado.includes('APROBADO') || resultado.includes('EGRESADO') || resultado.includes('OPERACI') || a.es_iop === 1;
     } else if (filtroResultado === 'DESAPROBADO') {
       matchResultado = resultado.includes('DESAPROBADO') || resultado.includes('BAJA') || resultado.includes('CESADO') || a.es_baja === 1;
@@ -48,6 +96,8 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
 
     return matchBusqueda && matchDia && matchResultado;
   });
+
+  const caidasPendientesCount = asesores.filter(a => a.requiere_regularizacion || a.es_desconexion_sin_registro).length;
 
   const ordenados = [...asesoresFiltrados].sort((a, b) => {
     if (ordenarPor === 'calidad')       return b.calidad_pct - a.calidad_pct;
@@ -124,6 +174,30 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
           />
         </div>
 
+        {/* Botón de Alerta de Caídas Pendientes de Regularizar */}
+        {caidasPendientesCount > 0 && (
+          <button
+            onClick={() => setFiltroResultado(filtroResultado === 'DESCONEXION' ? '' : 'DESCONEXION')}
+            style={{
+              padding: '0.55rem 0.95rem',
+              background: filtroResultado === 'DESCONEXION' ? '#dc2626' : '#fff1f2',
+              color: filtroResultado === 'DESCONEXION' ? '#ffffff' : '#dc2626',
+              border: '1px solid #fecdd3',
+              borderRadius: '8px',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(220, 38, 38, 0.15)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            🚨 Caídas Sin Regularizar ({caidasPendientesCount})
+          </button>
+        )}
+
         {/* Filtro Día */}
         <select
           value={filtroDia}
@@ -165,6 +239,7 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
           }}
         >
           <option value="">Todos los Resultados</option>
+          <option value="DESCONEXION">🚨 REGULARIZAR: Desconexión D1→D2</option>
           <option value="APROBADO">🟢 APROBADO / EGRESADO A OP</option>
           <option value="DESAPROBADO">🔴 DESAPROBADO / BAJA OJT</option>
           <option value="INDUCCIÓN">🔵 INDUCCIÓN (D1-D2)</option>
@@ -200,7 +275,7 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
           <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <tr>
               <th>DNI / Asesor</th>
-              <th>Campaña & Formador</th>
+              <th style={{ minWidth: '160px' }}>Campaña &amp; Formador</th>
               <th style={{ textAlign: 'center' }}>Evolución (D1 → D8)</th>
               <th style={{ textAlign: 'center' }}>Ingreso a Operación (I-OP)</th>
               <th style={{ textAlign: 'center' }}>Evaluación Final</th>
@@ -208,7 +283,7 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
               <th style={{ textAlign: 'center' }}>KPI 1: Transf. %</th>
               <th style={{ textAlign: 'center' }}>KPI 2: tNPS %</th>
               <th style={{ textAlign: 'center' }}>KPI 3: Calidad %</th>
-              <th style={{ textAlign: 'center' }}>Acción</th>
+              <th style={{ textAlign: 'center', minWidth: '140px', whiteSpace: 'nowrap' }}>Acción</th>
             </tr>
           </thead>
           <tbody>
@@ -247,9 +322,9 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
                   </td>
 
                   {/* Campaña & Formador */}
-                  <td>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f1c2e' }}>{a.campana}</div>
-                    <div style={{ fontSize: '0.72rem', color: '#7a90ad' }}>{a.formador}</div>
+                  <td style={{ maxWidth: '180px' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f1c2e', display: 'block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.campana}>{a.campana}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#7a90ad', display: 'block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.formador}>{a.formador}</div>
                   </td>
 
                   {/* Tira Visual de Evolución de 8 Días con Íconos */}
@@ -330,11 +405,12 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
                   {/* Evaluación Final (Aprobó / Desaprobó) */}
                   <td style={{ textAlign: 'center' }}>
                     <span className={`badge-exec ${
+                      (a.requiere_regularizacion || a.es_desconexion_sin_registro) ? 'badge-red' :
                       a.resultado_evaluacion?.includes('APROBADO') ? 'badge-green' :
                       a.resultado_evaluacion?.includes('DESAPROBADO') ? 'badge-red' :
                       a.resultado_evaluacion?.includes('INDUCCIÓN') ? 'badge-blue' : 'badge-amber'
                     }`}>
-                      {a.resultado_evaluacion}
+                      {(a.requiere_regularizacion || a.es_desconexion_sin_registro) ? '🚨 DESCONEXIÓN D1→D2' : a.resultado_evaluacion}
                     </span>
                     {a.motivo_baja && (
                       <div style={{ fontSize: '0.67rem', color: '#dc2626', marginTop: '0.2rem', maxWidth: '130px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.motivo_baja}>
@@ -350,79 +426,104 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision }) 
                     </span>
                   </td>
 
-                  {/* KPI 1: Transferencia % */}
+                  {/* KPI 1: Transferencia % + Sparkline */}
                   <td style={{ textAlign: 'center' }}>
-                    <span style={{
-                      fontSize: '0.85rem', fontWeight: 800,
-                      color: a.transferencia_pct <= 15 ? '#0d9488' : a.transferencia_pct <= 25 ? '#d97706' : '#dc2626'
-                    }}>
-                      {a.transferencia_pct}%
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <Sparkline
+                        data={a.historico_transf || [Math.min(100, (a.transferencia_pct || 0) + 8), Math.min(100, (a.transferencia_pct || 0) + 3), a.transferencia_pct || 0]}
+                        target={15}
+                        isLowerBetter={true}
+                      />
+                      <span style={{
+                        fontSize: '0.82rem', fontWeight: 800,
+                        color: a.transferencia_pct <= 15 ? '#0d9488' : a.transferencia_pct <= 25 ? '#d97706' : '#dc2626'
+                      }}>
+                        {a.transferencia_pct}%
+                      </span>
+                    </div>
                   </td>
 
-                  {/* KPI 2: tNPS % */}
+                  {/* KPI 2: tNPS % + Sparkline */}
                   <td style={{ textAlign: 'center' }}>
-                    <span style={{
-                      fontSize: '0.85rem', fontWeight: 800,
-                      color: a.tnps_pct >= 65 ? '#0d9488' : a.tnps_pct >= 45 ? '#d97706' : '#dc2626'
-                    }}>
-                      {a.tnps_pct}%
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <Sparkline
+                        data={a.historico_tnps || [Math.max(0, (a.tnps_pct || 0) - 10), Math.max(0, (a.tnps_pct || 0) - 4), a.tnps_pct || 0]}
+                        target={55}
+                      />
+                      <span style={{
+                        fontSize: '0.82rem', fontWeight: 800,
+                        color: a.tnps_pct >= 65 ? '#0d9488' : a.tnps_pct >= 45 ? '#d97706' : '#dc2626'
+                      }}>
+                        {a.tnps_pct}%
+                      </span>
+                    </div>
                   </td>
 
-                  {/* KPI 3: Calidad % */}
+                  {/* KPI 3: Calidad % + Sparkline */}
                   <td style={{ textAlign: 'center' }}>
-                    <span style={{
-                      fontSize: '0.90rem', fontWeight: 800,
-                      color: a.calidad_pct >= 80 ? '#0d9488' : a.calidad_pct >= 70 ? '#d97706' : '#dc2626'
-                    }}>
-                      {a.calidad_pct}%
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <Sparkline
+                        data={a.historico_calidad || [Math.max(0, (a.calidad_pct || 0) - 12), Math.max(0, (a.calidad_pct || 0) - 5), a.calidad_pct || 0]}
+                        target={75}
+                      />
+                      <span style={{
+                        fontSize: '0.85rem', fontWeight: 800,
+                        color: a.calidad_pct >= 80 ? '#0d9488' : a.calidad_pct >= 70 ? '#d97706' : '#dc2626'
+                      }}>
+                        {a.calidad_pct}%
+                      </span>
+                    </div>
                   </td>
 
                   {/* Acción */}
-                  <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  <td style={{ textAlign: 'center', minWidth: '140px', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
                     {esOperativo ? (
-                      <span style={{
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        padding: '0.25rem 0.6rem',
-                        borderRadius: '6px',
-                        background: '#d1fae5',
-                        color: '#065f46',
-                        border: '1px solid #a7f3d0',
-                        display: 'inline-block'
-                      }}>
+                      <span className="badge-status-pill badge-status-verde">
                         🟢 En Operación
                       </span>
                     ) : esBaja ? (
-                      <span style={{
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        padding: '0.25rem 0.6rem',
-                        borderRadius: '6px',
-                        background: '#fee2e2',
-                        color: '#991b1b',
-                        border: '1px solid #fca5a5',
-                        display: 'inline-block'
-                      }}>
+                      <span className="badge-status-pill badge-status-rojo">
                         🔴 Baja OJT
                       </span>
+                    ) : (a.requiere_regularizacion || a.es_desconexion_sin_registro) ? (
+                      <button
+                        className="badge-status-pill badge-status-rojo touch-target"
+                        style={{ cursor: 'pointer', background: '#fff1f2', border: '1px solid #fecdd3', color: '#dc2626', fontWeight: 800 }}
+                        onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Regularizar Desconexión D1-D2', a.nombre || a.asesor)}
+                      >
+                        🚨 Regularizar
+                      </button>
                     ) : esBucle ? (
-                      <button className="btn-exec btn-exec-danger" onClick={() => onEjecutarDecision(a.documento, 'Corte Bucle Exceso', a.nombre)}>
-                        Corte Bucle
+                      <button
+                        className="badge-status-pill badge-status-rojo touch-target"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Corte Bucle Exceso', a.nombre || a.asesor)}
+                      >
+                        🚨 Corte Bucle
                       </button>
                     ) : a.calidad_pct < 65 && diaActual >= 3 ? (
-                      <button className="btn-exec btn-exec-danger" onClick={() => onEjecutarDecision(a.documento, 'Corte Preventivo', a.nombre)}>
-                        Cortar
+                      <button
+                        className="badge-status-pill badge-status-rojo touch-target"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Corte Preventivo', a.nombre || a.asesor)}
+                      >
+                        ⚠️ Corte Preventivo
                       </button>
                     ) : diaActual >= 6 ? (
-                      <button className="btn-exec btn-exec-warning" onClick={() => onEjecutarDecision(a.documento, 'Aprobar Extensión', a.nombre)}>
-                        Extensión
+                      <button
+                        className="badge-status-pill badge-status-amber touch-target"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Aprobar Extensión', a.nombre || a.asesor)}
+                      >
+                        ⏳ Extensión
                       </button>
                     ) : (
-                      <button className="btn-exec" onClick={() => onEjecutarDecision(a.documento, 'Acompañamiento Coaching', a.nombre)}>
-                        Coaching
+                      <button
+                        className="badge-status-pill badge-status-blue touch-target"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Acompañamiento Coaching', a.nombre || a.asesor)}
+                      >
+                        ⚡ Coaching
                       </button>
                     )}
                   </td>

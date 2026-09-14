@@ -147,9 +147,15 @@ export default function ScatterVolumenVsCalidad({ data }) {
       backdropFilter: 'blur(20px)',
       WebkitBackdropFilter: 'blur(20px)',
       borderRadius: '20px',
-      padding: '1.4rem',
+      padding: '1.2rem',
       border: '1px solid rgba(226, 232, 240, 0.8)',
-      boxShadow: '0 10px 30px rgba(15, 23, 42, 0.04)'
+      boxShadow: '0 10px 30px rgba(15, 23, 42, 0.04)',
+      height: '100%',
+      minHeight: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      boxSizing: 'border-box',
+      overflowY: 'auto'
     }}>
       
       {/* ── Header con estilo macOS / iOS segmented control ── */}
