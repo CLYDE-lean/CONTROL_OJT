@@ -1,6 +1,46 @@
 const express = require('express');
 const router = express.Router();
 const ojtMetricsService = require('../services/ojtMetricsService');
+const {
+  VIGENCIA_HORAS,
+  passwordConfigurada,
+  igualSeguro,
+  crearToken,
+  tokenValido,
+  requiereAccesoImpacto
+} = require('../middleware/accesoImpacto');
+
+/**
+ * POST /api/ojt/acceso-impacto
+ * Valida la contraseña del panel de Impacto y entrega un token con vigencia limitada.
+ */
+router.post('/acceso-impacto', (req, res) => {
+  const secreto = passwordConfigurada();
+  if (!secreto) {
+    return res.status(503).json({
+      success: false,
+      error: 'acceso_no_configurado',
+      message: 'Falta definir IMPACTO_PASSWORD en el servidor.'
+    });
+  }
+
+  const password = (req.body || {}).password;
+  if (!password || !igualSeguro(password, secreto)) {
+    return res.status(401).json({ success: false, error: 'password_incorrecta', message: 'Contraseña incorrecta.' });
+  }
+
+  return res.json({ success: true, token: crearToken(secreto), vigencia_horas: VIGENCIA_HORAS });
+});
+
+/**
+ * GET /api/ojt/acceso-impacto
+ * Permite al navegador saber si su token sigue vigente sin volver a pedir la contraseña.
+ */
+router.get('/acceso-impacto', (req, res) => {
+  const secreto = passwordConfigurada();
+  if (!secreto) return res.json({ success: false, configurado: false, autorizado: false });
+  return res.json({ success: true, configurado: true, autorizado: tokenValido(req.get('x-impacto-token') || '', secreto) });
+});
 
 /**
  * GET /api/ojt/filtros-disponibles
@@ -31,13 +71,39 @@ router.get('/embudo-semanal', async (req, res) => {
 /**
  * GET /api/ojt/roi-extensiones
  */
-router.get('/roi-extensiones', async (req, res) => {
+router.get('/roi-extensiones', requiereAccesoImpacto, async (req, res) => {
   try {
     const filters = req.query || {};
     const data = await ojtMetricsService.getRoiExtensiones(filters);
     res.json({ success: true, ...data });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Error al consultar ROI', message: err.message });
+  }
+});
+
+/**
+ * GET /api/ojt/resumen-impacto
+ * Los 4 indicadores del encabezado de Impacto, todos sobre la base de quienes iniciaron OJT.
+ */
+router.get('/resumen-impacto', requiereAccesoImpacto, async (req, res) => {
+  try {
+    const data = await ojtMetricsService.getResumenImpacto(req.query || {});
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Error al calcular el resumen de impacto', message: err.message });
+  }
+});
+
+/**
+ * GET /api/ojt/costo-extension-postpago
+ * Valoriza las llamadas de los días de extensión (D6+) con la tarifa mensual de POSTPAGO.
+ */
+router.get('/costo-extension-postpago', requiereAccesoImpacto, async (req, res) => {
+  try {
+    const data = await ojtMetricsService.getCostoExtensionPostpago(req.query || {});
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Error al calcular costo de extensión POSTPAGO', message: err.message });
   }
 });
 
@@ -93,9 +159,10 @@ router.post('/detalle-auditoria', handleDetalleAuditoria);
 const handleDashboardResumen = async (req, res) => {
   try {
     const filters = req.method === 'POST' ? (req.body || {}) : (req.query || {});
-    const [embudo, roi, matriz, opcionesFiltros] = await Promise.all([
+    // El ROI de extensiones no viaja aquí: es contenido del panel de Impacto y solo
+    // se entrega por /roi-extensiones, que exige contraseña.
+    const [embudo, matriz, opcionesFiltros] = await Promise.all([
       ojtMetricsService.getEmbudo5Dias(filters),
-      ojtMetricsService.getRoiExtensiones(filters),
       ojtMetricsService.getMatrizIntervencion(filters),
       ojtMetricsService.getFiltrosDisponibles(filters)
     ]);
@@ -105,7 +172,6 @@ const handleDashboardResumen = async (req, res) => {
       timestamp: new Date().toISOString(),
       filtros_disponibles: opcionesFiltros,
       embudo,
-      roi,
       matriz
     });
   } catch (err) {
@@ -181,7 +247,7 @@ router.get('/gantt-cumplimiento', async (req, res) => {
   }
 });
 
-router.get('/costo-incumplimiento', async (req, res) => {
+router.get('/costo-incumplimiento', requiereAccesoImpacto, async (req, res) => {
   try {
     const filters = req.query || {};
     const data = await ojtMetricsService.getCostoIncumplimientoGerencia(filters);

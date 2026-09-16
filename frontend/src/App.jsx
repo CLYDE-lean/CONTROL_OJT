@@ -10,6 +10,7 @@ import Embudo5DiasView        from './components/Embudo5DiasView';
 import ControlOperativoTabla  from './components/ControlOperativoTabla';
 import FormadorView           from './components/FormadorView';
 import GerenciaView           from './components/GerenciaView';
+import ImpactoLock            from './components/ImpactoLock';
 import RankingFormadoresView  from './components/RankingFormadoresView';
 import FiltroFlotantePro      from './components/FiltroFlotantePro';
 import ScatterVolumenVsCalidad from './components/ScatterVolumenVsCalidad';
@@ -25,6 +26,7 @@ import GraficaMotivosBajaCard from './components/GraficaMotivosBajaCard';
 import DetalleAuditoriaModal  from './components/DetalleAuditoriaModal';
 import BarraContextoFiltros from './components/BarraContextoFiltros';
 import CapacidadRysView from './components/CapacidadRysView';
+import { verificarAcceso } from './services/accesoImpacto';
 import { sumFte } from './utils/fte';
 import { personaCohorteKey } from './utils/personaKey';
 
@@ -47,6 +49,13 @@ export default function App() {
   const [modalAuditoriaOpen, setModalAuditoriaOpen] = useState(false);
   const [drawerFiltrosOpen, setDrawerFiltrosOpen] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const [impactoDesbloqueado, setImpactoDesbloqueado] = useState(false);
+
+  // Si la pestaña ya tenía un acceso vigente, el candado del navbar no debe aparecer.
+  useEffect(() => {
+    verificarAcceso().then(setImpactoDesbloqueado);
+  }, []);
 
   const [subVistaOperacion, setSubVistaOperacion] = useState('ranking'); // 'ranking' | 'evolucion'
   const [filtroTablaInicial, setFiltroTablaInicial] = useState('');
@@ -167,6 +176,7 @@ export default function App() {
           totalAsesores={total}
           filtros={filtros}
           onAbrirFiltros={() => setDrawerFiltrosOpen(true)}
+          impactoBloqueado={!impactoDesbloqueado}
           statusSlot={(
             <RealtimeBadge
               wsStatus={wsStatus}
@@ -270,11 +280,12 @@ export default function App() {
         {/* ── PESTAÑA: GERENCIA ── */}
         {vistaActiva === 'gerencia' && (
           <ErrorBoundary>
-            <GerenciaView
-              data={data}
-              roiData={data?.roi}
-              filtros={filtros}
-            />
+            <ImpactoLock onDesbloquear={() => setImpactoDesbloqueado(true)}>
+              <GerenciaView
+                data={data}
+                filtros={filtros}
+              />
+            </ImpactoLock>
           </ErrorBoundary>
         )}
 

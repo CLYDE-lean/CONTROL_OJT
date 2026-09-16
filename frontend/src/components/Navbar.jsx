@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, Users, DollarSign, TrendingUp, CalendarRange, Sun, Moon, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, Users, DollarSign, TrendingUp, CalendarRange, Sun, Moon, SlidersHorizontal, Lock } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import GEA_LOGO_URL from '../assets/geaLogoAsset.js';
 
@@ -19,7 +19,8 @@ export default function Navbar({
   onActualizar,
   filtros = {},
   onAbrirFiltros,
-  statusSlot = null
+  statusSlot = null,
+  impactoBloqueado = false
 }) {
   const { isDark, toggleTheme } = useTheme();
   const activos = Object.entries(filtros).filter(([, v]) => Boolean(v));
@@ -255,6 +256,9 @@ export default function Navbar({
               >
                 <Icon size={12} style={{ opacity: activo ? 1 : 0.75, color: activo ? '#38bdf8' : 'currentColor' }} />
                 {tab.label}
+                {tab.id === 'gerencia' && impactoBloqueado && (
+                  <Lock size={10} style={{ opacity: 0.8, color: '#f59e0b' }} />
+                )}
                 {tab.id === 'supervisor' && totalDecisionesPendientes > 0 && (
                   <span style={{
                     background: '#ef4444',

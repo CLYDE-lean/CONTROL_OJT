@@ -1,6 +1,15 @@
 const db = require('../config/database');
 
 /**
+ * Tarifa de facturación por llamada de CLARO POSTPAGO (soles), por periodo YYYYMM.
+ * Cambia cada mes: agregar aquí el valor del mes nuevo cuando lo confirme el cliente.
+ */
+const TARIFA_LLAMADA_POSTPAGO = {
+  '202608': 2.4,
+  '202609': 3.85
+};
+
+/**
  * Servicio central de Ultra-Alta Velocidad para el cálculo de Métricas BI & Control Operativo OJT.
  * Utiliza In-Memory Fast Indexing Engine para responder a cualquier filtro en < 5ms.
  */
@@ -849,6 +858,315 @@ class OjtMetricsService {
           ? `Costo hundido de extensiones fallidas: S/ ${Math.round(impactoExt).toLocaleString('es-PE')} (${caidosPostExtension} bajas, ${diasExtensionFallidos} días extra × S/ ${TARIFA_OJT}). Quien convirtió no se cuenta como pérdida.`
           : 'No hay bajas post-extensión en el filtro: no hay costo hundido de extensión.'
       }
+    };
+  }
+
+  /**
+   * 3.c RESUMEN DE IMPACTO (4 indicadores del encabezado)
+   * Todos se miden sobre la MISMA base: personas con asistencia en DIA_CONEXION = 1.
+   * Cada indicador viaja con su denominador y su fórmula en texto, para mostrarlos en la tarjeta.
+   */
+  async getResumenImpacto(filters = {}) {
+    const allData = await this.ensureCache();
+    const filteredRows = this.filterCache(allData, filters);
+
+    const rowsByCohorte = new Map();
+    for (const r of filteredRows) {
+      const key = this.cohortKey(r);
+      if (!rowsByCohorte.has(key)) rowsByCohorte.set(key, []);
+      rowsByCohorte.get(key).push(r);
+    }
+
+    let iniciaron = 0;
+    let pasaronOp = 0;
+    let seRetiraron = 0;
+    let siguenEnOjt = 0;
+    let llegaronD5 = 0;
+    let conDiasExtra = 0;
+    let extraConvirtieron = 0;
+    let extraBajas = 0;
+    const bajasPorDia = new Map();
+
+    for (const rows of rowsByCohorte.values()) {
+      const info = this.summarizeOjtCycle(rows);
+      if (info.asistio_d1 !== 1) continue;
+
+      iniciaron++;
+      const diaFin = info.dia_efectivo || info.max_dia_ojt;
+      if (diaFin >= 5) llegaronD5++;
+
+      const pasoAntesDelD6 = info.es_iop === 1 && Number(info.dia_iop) <= 5;
+      if (diaFin >= 6 && !pasoAntesDelD6) {
+        conDiasExtra++;
+        if (info.es_iop === 1) extraConvirtieron++;
+        else if (info.es_baja === 1) extraBajas++;
+      }
+
+      if (info.es_iop === 1) {
+        pasaronOp++;
+      } else if (info.es_baja === 1) {
+        seRetiraron++;
+        bajasPorDia.set(diaFin, (bajasPorDia.get(diaFin) || 0) + 1);
+      } else {
+        siguenEnOjt++;
+      }
+    }
+
+    const pct = (n) => (iniciaron > 0 ? Math.round((n / iniciaron) * 1000) / 10 : 0);
+
+    let diaMasBajas = null;
+    let bajasEnEseDia = 0;
+    for (const [dia, n] of bajasPorDia.entries()) {
+      if (n > bajasEnEseDia) {
+        diaMasBajas = dia;
+        bajasEnEseDia = n;
+      }
+    }
+
+    const conversionExtra = conDiasExtra > 0
+      ? Math.round((extraConvirtieron / conDiasExtra) * 1000) / 10
+      : 0;
+
+    const META_RETENCION_D5 = 55;
+    const faltanParaMeta = Math.max(0, Math.ceil((META_RETENCION_D5 / 100) * iniciaron) - llegaronD5);
+
+    return {
+      success: true,
+      base: {
+        iniciaron_ojt: iniciaron,
+        etiqueta: 'iniciaron OJT',
+        definicion: 'Personas con asistencia registrada en DIA_CONEXION = 1. La capacitación previa no cuenta.'
+      },
+      indicadores: [
+        {
+          id: 'pasaron_op',
+          titulo: 'Pasaron a operación',
+          valor: pasaronOp,
+          base: iniciaron,
+          pct: pct(pasaronOp),
+          detalle: `${seRetiraron} se retiraron y ${siguenEnOjt} siguen en OJT`,
+          formula: 'Personas con su primer I-OP registrado, sobre las que iniciaron OJT. Si alguien vuelve en otra aula, cada ciclo se cuenta aparte.',
+          tono: 'positivo'
+        },
+        {
+          id: 'se_retiraron',
+          titulo: 'Se retiraron',
+          valor: seRetiraron,
+          base: iniciaron,
+          pct: pct(seRetiraron),
+          detalle: diaMasBajas
+            ? `El día ${diaMasBajas} concentra ${bajasEnEseDia}`
+            : `${pct(seRetiraron)}% de los que iniciaron OJT`,
+          formula: 'Personas dadas de baja durante el OJT, sin haber llegado a operación. No incluye las bajas de capacitación previa.',
+          tono: 'negativo'
+        },
+        {
+          id: 'retencion_d5',
+          titulo: 'Seguían al día 5',
+          valor: llegaronD5,
+          base: iniciaron,
+          pct: pct(llegaronD5),
+          detalle: faltanParaMeta > 0
+            ? `Meta 55% · faltan ${faltanParaMeta} personas`
+            : 'Meta 55% · cumplida',
+          formula: 'Personas cuyo ciclo llegó al día 5 de conexión. Quien pasó a operación antes del día 5 no se cuenta aquí, porque ya salió del OJT.',
+          tono: pct(llegaronD5) >= META_RETENCION_D5 ? 'positivo' : 'alerta'
+        },
+        {
+          id: 'dias_extra',
+          titulo: 'Necesitaron días extra',
+          valor: conDiasExtra,
+          base: iniciaron,
+          pct: pct(conDiasExtra),
+          detalle: `${conversionExtra}% de ellos terminó pasando`,
+          formula: 'Personas que llegaron al día 6 o más sin haber pasado a operación en los 5 días normales. La extensión es una decisión, no parte del OJT estándar.',
+          tono: 'neutro'
+        }
+      ],
+      contexto: {
+        siguen_en_ojt: siguenEnOjt,
+        extension_convirtieron: extraConvirtieron,
+        extension_bajas: extraBajas,
+        conversion_extension_pct: conversionExtra,
+        dia_mas_bajas: diaMasBajas,
+        bajas_en_dia_mas_alto: bajasEnEseDia
+      }
+    };
+  }
+
+  /** Periodo YYYYMM de una fila: primero la fecha real del día, luego el PERIODO de la base. */
+  periodoDeFila(r) {
+    const fecha = String(r.fecha_asistencia || '').trim();
+    if (/^\d{4}-\d{2}/.test(fecha)) return fecha.slice(0, 4) + fecha.slice(5, 7);
+    const periodo = String(r.periodo || '').replace(/[^0-9]/g, '');
+    return periodo.length >= 6 ? periodo.slice(0, 6) : '';
+  }
+
+  tarifaLlamadaPostpago(periodo) {
+    const t = TARIFA_LLAMADA_POSTPAGO[periodo];
+    return Number.isFinite(t) ? t : null;
+  }
+
+  esPostpago(campana) {
+    return String(campana || '').toUpperCase().includes('POSTPAGO');
+  }
+
+  /**
+   * 3.b COSTO DE EXTENSIÓN POR FACTURACIÓN DE LLAMADAS (SOLO CLARO POSTPAGO)
+   * La campaña se factura por llamada: cada llamada de un día de extensión (D6+)
+   * se valoriza con la tarifa del mes en que ocurrió ese día.
+   * Los 5 primeros días son OJT normal y no entran al cálculo.
+   */
+  async getCostoExtensionPostpago(filters = {}) {
+    const allData = await this.ensureCache();
+    const filteredRows = this.filterCache(allData, filters).filter((r) => this.esPostpago(r.campana));
+
+    const rowsByCohorte = new Map();
+    for (const r of filteredRows) {
+      const key = this.cohortKey(r);
+      if (!rowsByCohorte.has(key)) rowsByCohorte.set(key, []);
+      rowsByCohorte.get(key).push(r);
+    }
+
+    let asesoresConExtension = 0;
+    let diasExtension = 0;
+    let llamadasExtension = 0;
+    let costoTotal = 0;
+    let costoConvertidos = 0;
+    let costoBajas = 0;
+    let costoEnCurso = 0;
+    let llamadasSinTarifa = 0;
+    let asesoresSinTarifa = 0;
+    const periodosSinTarifa = new Set();
+
+    const porDia = new Map();
+    const porPeriodo = new Map();
+    const porFormador = new Map();
+
+    for (const rows of rowsByCohorte.values()) {
+      const info = this.summarizeOjtCycle(rows);
+      if (info.entro_ojt !== 1) continue;
+
+      const diaFin = info.dia_efectivo || info.max_dia_ojt;
+      if (diaFin < 6) continue;
+
+      // Una fila por día (la más reciente) para no duplicar llamadas.
+      const filaPorDia = new Map();
+      for (const r of rows) {
+        const dia = parseInt(r.raw_dia_conexion, 10);
+        if (!Number.isFinite(dia) || dia < 6 || dia > diaFin) continue;
+        const prev = filaPorDia.get(dia);
+        if (!prev || (r.fecha_asistencia || '') >= (prev.fecha_asistencia || '')) {
+          filaPorDia.set(dia, r);
+        }
+      }
+      if (filaPorDia.size === 0) continue;
+
+      asesoresConExtension++;
+      const convirtio = info.es_iop === 1;
+      const fueBaja = !convirtio && info.es_baja === 1;
+      const sample = rows.find((r) => r.formador) || rows[0] || {};
+      let costoAsesor = 0;
+      let sinTarifaAsesor = false;
+
+      for (const [dia, r] of filaPorDia.entries()) {
+        const llamadas = parseFloat(r.q_atendidas) || 0;
+        const periodo = this.periodoDeFila(r);
+        const tarifa = this.tarifaLlamadaPostpago(periodo);
+
+        diasExtension++;
+        llamadasExtension += llamadas;
+
+        if (!porDia.has(dia)) {
+          porDia.set(dia, { dia, asesores: 0, llamadas: 0, costo: 0 });
+        }
+        const d = porDia.get(dia);
+        d.asesores++;
+        d.llamadas += llamadas;
+
+        if (tarifa === null) {
+          llamadasSinTarifa += llamadas;
+          sinTarifaAsesor = true;
+          if (periodo) periodosSinTarifa.add(periodo);
+          continue;
+        }
+
+        const costo = llamadas * tarifa;
+        costoAsesor += costo;
+        costoTotal += costo;
+        d.costo += costo;
+
+        if (!porPeriodo.has(periodo)) {
+          porPeriodo.set(periodo, { periodo, tarifa, llamadas: 0, costo: 0, dias: 0 });
+        }
+        const p = porPeriodo.get(periodo);
+        p.llamadas += llamadas;
+        p.costo += costo;
+        p.dias++;
+      }
+
+      if (sinTarifaAsesor) asesoresSinTarifa++;
+      if (convirtio) costoConvertidos += costoAsesor;
+      else if (fueBaja) costoBajas += costoAsesor;
+      else costoEnCurso += costoAsesor;
+
+      const fkey = String(sample.formador || 'SIN FORMADOR').trim() || 'SIN FORMADOR';
+      if (!porFormador.has(fkey)) {
+        porFormador.set(fkey, { nombre: fkey, asesores: 0, costo: 0, bajas: 0 });
+      }
+      const f = porFormador.get(fkey);
+      f.asesores++;
+      f.costo += costoAsesor;
+      if (fueBaja) f.bajas++;
+    }
+
+    const round2 = (n) => Math.round(n * 100) / 100;
+    const promLlamadasDia = diasExtension > 0 ? Math.round((llamadasExtension / diasExtension) * 10) / 10 : 0;
+    const periodoVigente = Object.keys(TARIFA_LLAMADA_POSTPAGO).sort().pop() || null;
+
+    return {
+      success: true,
+      campana: 'CLARO POSTPAGO',
+      regla: 'Solo días de extensión (DIA_CONEXION ≥ 6). Llamadas del día × tarifa del mes en que ocurrió el día.',
+      tarifas: Object.entries(TARIFA_LLAMADA_POSTPAGO)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([periodo, tarifa]) => ({ periodo, tarifa })),
+      tarifa_vigente: periodoVigente ? TARIFA_LLAMADA_POSTPAGO[periodoVigente] : null,
+      periodo_vigente: periodoVigente,
+      metricas: {
+        asesores_con_extension: asesoresConExtension,
+        dias_extension: diasExtension,
+        llamadas_extension: Math.round(llamadasExtension),
+        promedio_llamadas_dia: promLlamadasDia,
+        costo_total_pen: round2(costoTotal),
+        costo_convertidos_pen: round2(costoConvertidos),
+        costo_bajas_pen: round2(costoBajas),
+        costo_en_curso_pen: round2(costoEnCurso),
+        costo_promedio_por_asesor_pen: asesoresConExtension > 0 ? round2(costoTotal / asesoresConExtension) : 0,
+        costo_promedio_por_dia_pen: diasExtension > 0 ? round2(costoTotal / diasExtension) : 0
+      },
+      sin_tarifa: {
+        asesores: asesoresSinTarifa,
+        llamadas: Math.round(llamadasSinTarifa),
+        periodos: Array.from(periodosSinTarifa).sort()
+      },
+      por_dia: Array.from(porDia.values())
+        .sort((a, b) => a.dia - b.dia)
+        .map((d) => ({
+          dia: d.dia,
+          etiqueta: d.dia <= 8 ? `Día ${d.dia}` : `Día ${d.dia} (fuera de política)`,
+          asesores: d.asesores,
+          llamadas: Math.round(d.llamadas),
+          promedio_llamadas: d.asesores > 0 ? Math.round((d.llamadas / d.asesores) * 10) / 10 : 0,
+          costo: round2(d.costo)
+        })),
+      por_periodo: Array.from(porPeriodo.values())
+        .sort((a, b) => a.periodo.localeCompare(b.periodo))
+        .map((p) => ({ ...p, llamadas: Math.round(p.llamadas), costo: round2(p.costo) })),
+      por_formador: Array.from(porFormador.values())
+        .sort((a, b) => b.costo - a.costo)
+        .slice(0, 6)
+        .map((f) => ({ ...f, costo: round2(f.costo) }))
     };
   }
 

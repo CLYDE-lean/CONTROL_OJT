@@ -172,7 +172,7 @@ body.modal-open {
 .header-compacto {
   height: 44px;
   display: flex;
-  alignItems: 'center';
+  align-items: center;
   justify-content: space-between;
   padding: 0 10px;
   background: var(--bg-card, #1e293b);
@@ -1292,6 +1292,16 @@ td.sticky-left, th.sticky-left {
   overflow: hidden;
 }
 
+.gerencia-grid-3col {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 0.85fr;
+  grid-template-rows: 1fr;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* ── Modificadores de Grid Dinámico ── */
 .span-2-cols { grid-column: span 2 !important; }
 .span-2-rows { grid-row: span 2 !important; }
@@ -1550,7 +1560,7 @@ td.sticky-left, th.sticky-left {
     grid-template-columns: 1fr !important;
     min-height: 260px;
   }
-  .formador-grid-2x2, .gerencia-grid-2x2, .gerencia-grid-2col {
+  .formador-grid-2x2, .gerencia-grid-2x2, .gerencia-grid-2col, .gerencia-grid-3col {
     grid-template-columns: 1fr;
   }
   .span-2-cols {
