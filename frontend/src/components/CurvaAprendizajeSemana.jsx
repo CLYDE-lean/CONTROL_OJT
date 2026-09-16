@@ -157,7 +157,7 @@ export default function CurvaAprendizajeSemana({ filters = {} }) {
       flexDirection: 'column',
       minHeight: 0,
       overflow: 'hidden',
-      padding: '0.65rem 0.95rem',
+      padding: '0.45rem 0.75rem',
       marginBottom: 0,
       boxSizing: 'border-box'
     }}>

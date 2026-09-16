@@ -17,11 +17,20 @@ export default function FiltroFlotantePro({
   onFiltroChange, 
   onLimpiarFiltros,
   totalFiltrado = 0,
-  cargando = false
+  cargando = false,
+  abierto: abiertoProp,
+  onToggle
 }) {
-  const [abierto, setAbierto] = useState(false);
+  const [abiertoInterno, setAbiertoInterno] = useState(false);
   const [busquedaLocal, setBusquedaLocal] = useState('');
   const drawerRef = useRef(null);
+
+  const esControlado = abiertoProp !== undefined;
+  const abierto = esControlado ? abiertoProp : abiertoInterno;
+  const setAbierto = (val) => {
+    if (onToggle) onToggle(val);
+    if (!esControlado) setAbiertoInterno(val);
+  };
 
   // Extraer las opciones disponibles recalculadas en cascada por el backend
   const campanas   = opciones?.campanas   || [];
@@ -75,8 +84,9 @@ export default function FiltroFlotantePro({
 
   return (
     <>
-      {/* ── 1. BOTÓN FLOTANTE FAB (STICKY / FIXED OVERLAY) ── */}
-      <div className="fab-container">
+      {/* ── 1. BOTÓN FLOTANTE FAB (Solo si no está controlado desde la barra superior) ── */}
+      {!esControlado && (
+        <div className="fab-container">
         <button
           onClick={() => setAbierto(!abierto)}
           aria-label="Abrir Filtros del Dashboard"
@@ -160,6 +170,7 @@ export default function FiltroFlotantePro({
           )}
         </button>
       </div>
+      )}
 
       {/* ── 2. MODAL / OVERLAY BACKDROP WITH BLUR ── */}
       {abierto && (
@@ -204,7 +215,7 @@ export default function FiltroFlotantePro({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.25rem' }}>
               <Database size={12} style={{ color: '#4ade80' }} />
               <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>
-                Supabase Cache · GEA PIENSA EN TI
+                Periodo → Semana → Segmento → Campaña → Grupo
               </span>
             </div>
           </div>
@@ -287,7 +298,7 @@ export default function FiltroFlotantePro({
                   }}
                 >
                   <span style={{ color: meta.color }}>{meta.label}:</span>
-                  <strong style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <strong>
                     {val}
                   </strong>
                   <X
@@ -357,56 +368,9 @@ export default function FiltroFlotantePro({
         {/* Cuerpo de Selectores en Cascada */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.5rem 1.5rem' }}>
 
-          {/* 1. Formador */}
+          {/* 1. Periodo */}
           <FiltroSelectCascada
-            label="Formador"
-            icon={Users}
-            iconColor="#3b82f6"
-            value={filtros.formador || ''}
-            onChange={(v) => onFiltroChange('formador', v)}
-            opciones={formadores}
-            placeholder="Todos los Formadores"
-            searchQuery={busquedaLocal}
-          />
-
-          {/* 2. Campaña */}
-          <FiltroSelectCascada
-            label="Campaña"
-            icon={Target}
-            iconColor="#f59e0b"
-            value={filtros.campana || ''}
-            onChange={(v) => onFiltroChange('campana', v)}
-            opciones={campanas}
-            placeholder="Todas las Campañas"
-            searchQuery={busquedaLocal}
-          />
-
-          {/* 3. Código de Grupo */}
-          <FiltroSelectCascada
-            label="Código de Grupo"
-            icon={Layers}
-            iconColor="#10b981"
-            value={filtros.grupo || ''}
-            onChange={(v) => onFiltroChange('grupo', v)}
-            opciones={grupos}
-            placeholder="Todos los Grupos"
-            searchQuery={busquedaLocal}
-          />
-
-          {/* 4. Cohorte / Semana */}
-          <FiltroSelectCascada
-            label="Cohorte / Semana"
-            icon={Calendar}
-            iconColor="#38bdf8"
-            value={filtros.semana || ''}
-            onChange={(v) => onFiltroChange('semana', v)}
-            opciones={semanas}
-            placeholder="Todas las Cohortes"
-            searchQuery={busquedaLocal}
-          />
-
-          {/* 5. Periodo / Mes */}
-          <FiltroSelectCascada
+            paso="1"
             label="Periodo / Mes"
             icon={Calendar}
             iconColor="#a855f7"
@@ -417,9 +381,23 @@ export default function FiltroFlotantePro({
             searchQuery={busquedaLocal}
           />
 
-          {/* 6. Segmento */}
+          {/* 2. Semana */}
+          <FiltroSelectCascada
+            paso="2"
+            label="Cohorte / Semana"
+            icon={Calendar}
+            iconColor="#38bdf8"
+            value={filtros.semana || ''}
+            onChange={(v) => onFiltroChange('semana', v)}
+            opciones={semanas}
+            placeholder="Todas las Cohortes"
+            searchQuery={busquedaLocal}
+          />
+
+          {/* 3. Segmento */}
           {segmentos.length > 0 && (
             <FiltroSelectCascada
+              paso="3"
               label="Segmento"
               icon={Briefcase}
               iconColor="#ec4899"
@@ -430,6 +408,44 @@ export default function FiltroFlotantePro({
               searchQuery={busquedaLocal}
             />
           )}
+
+          {/* 4. Campaña */}
+          <FiltroSelectCascada
+            paso="4"
+            label="Campaña"
+            icon={Target}
+            iconColor="#f59e0b"
+            value={filtros.campana || ''}
+            onChange={(v) => onFiltroChange('campana', v)}
+            opciones={campanas}
+            placeholder="Todas las Campañas"
+            searchQuery={busquedaLocal}
+          />
+
+          {/* 5. Código de Grupo */}
+          <FiltroSelectCascada
+            paso="5"
+            label="Código de Grupo"
+            icon={Layers}
+            iconColor="#10b981"
+            value={filtros.grupo || ''}
+            onChange={(v) => onFiltroChange('grupo', v)}
+            opciones={grupos}
+            placeholder="Todos los Grupos"
+            searchQuery={busquedaLocal}
+          />
+
+          {/* 6. Formador */}
+          <FiltroSelectCascada
+            label="Formador"
+            icon={Users}
+            iconColor="#3b82f6"
+            value={filtros.formador || ''}
+            onChange={(v) => onFiltroChange('formador', v)}
+            opciones={formadores}
+            placeholder="Todos los Formadores"
+            searchQuery={busquedaLocal}
+          />
 
           {/* 7. Modalidad */}
           <FiltroSelectCascada
@@ -521,6 +537,7 @@ export default function FiltroFlotantePro({
  */
 function FiltroSelectCascada({ 
   label, 
+  paso,
   icon: IconComponent, 
   iconColor, 
   value, 
@@ -549,6 +566,22 @@ function FiltroSelectCascada({
           textTransform: 'uppercase',
           letterSpacing: '0.04em'
         }}>
+          {paso && (
+            <span style={{
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: estaActivo ? iconColor : '#e2e8f0',
+              color: estaActivo ? '#fff' : '#64748b',
+              fontSize: '0.62rem',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              {paso}
+            </span>
+          )}
           {IconComponent && <IconComponent size={13} style={{ color: iconColor }} />}
           {label}
         </label>

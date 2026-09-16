@@ -52,8 +52,8 @@ export default function FlashOjtResumenCard({ filters = {}, onNavegarAOperacion 
       minHeight: 0,
       overflow: 'hidden',
       padding: '1rem 1.25rem',
-      background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-      border: '1px solid var(--border-color)',
+      background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+      border: '1px solid rgba(56, 189, 248, 0.18)',
       borderRadius: 'var(--radius-lg)',
       boxShadow: 'var(--shadow-card)'
     }}>
@@ -76,13 +76,13 @@ export default function FlashOjtResumenCard({ filters = {}, onNavegarAOperacion 
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: '#0f1c2e', fontFamily: 'var(--font-heading)', margin: 0 }}>
+              <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-heading)', margin: 0 }}>
                 Cuadro de Control Flash OJT (Resumen)
               </h3>
               <span className="badge-exec badge-blue" style={{ fontSize: '0.65rem' }}>Ponderado</span>
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: 0 }}>
-              Ponderación oficial: KPI1 (30%), KPI2 (30%), KPI3 (40%)
+              Ponderación oficial: Transferencia 20%, tNPS 40%, Calidad 40%
             </p>
           </div>
         </div>
@@ -97,7 +97,7 @@ export default function FlashOjtResumenCard({ filters = {}, onNavegarAOperacion 
             <>
               <div style={{ textAlign: 'center' }}>
                 <span style={{ display: 'block', fontSize: '0.68rem', fontWeight: 700, color: '#7a90ad', textTransform: 'uppercase' }}>Evaluados</span>
-                <strong style={{ fontSize: '1.1rem', color: '#0f1c2e', fontFamily: 'var(--font-heading)' }}>{total.toLocaleString()}</strong>
+                <strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)', fontFamily: 'var(--font-heading)' }}>{total.toLocaleString()}</strong>
               </div>
 
               <div style={{ width: '1px', height: '24px', background: 'var(--border-color)' }} />

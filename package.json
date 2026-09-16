@@ -2,12 +2,13 @@
   "name": "portal-bi-control-ojt",
   "version": "2.0.0",
   "private": true,
-  "description": "Portal BI Control Operativo OJT de 5 Días con Serverless API para Netlify",
+  "description": "Portal BI Control Operativo OJT de 5 Días con API serverless (Vercel / Netlify)",
   "main": "backend/src/app.js",
   "scripts": {
     "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",

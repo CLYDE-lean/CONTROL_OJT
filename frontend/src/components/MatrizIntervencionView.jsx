@@ -43,7 +43,7 @@ export default function MatrizIntervencionView({ matrizData, onEjecutarDecision 
           </div>
 
           {q0Anomalo.map(a => (
-            <div key={a.documento} className="quad-row-item" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <div key={a.cohort_key || `${a.documento}-${a.semana}-${a.grupo}`} className="quad-row-item" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(239,68,68,0.3)' }}>
               <div>
                 <strong style={{ color: 'white' }}>{a.nombre}</strong> ({a.campana})
                 <span style={{ display: 'block', fontSize: '0.72rem', color: '#f87171', fontWeight: 600 }}>
@@ -75,7 +75,7 @@ export default function MatrizIntervencionView({ matrizData, onEjecutarDecision 
           </p>
           <div>
             {q3Fuga.map(a => (
-              <div key={a.documento} className="quad-row-item">
+              <div key={a.cohort_key || `${a.documento}-${a.semana}-${a.grupo}`} className="quad-row-item">
                 <div>
                   <strong>{a.nombre}</strong>
                   <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
@@ -104,7 +104,7 @@ export default function MatrizIntervencionView({ matrizData, onEjecutarDecision 
           </p>
           <div>
             {q4Alto.slice(0, 3).map(a => (
-              <div key={a.documento} className="quad-row-item">
+              <div key={a.cohort_key || `${a.documento}-${a.semana}-${a.grupo}`} className="quad-row-item">
                 <div>
                   <strong>{a.nombre}</strong>
                   <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--accent-success)' }}>
@@ -131,7 +131,7 @@ export default function MatrizIntervencionView({ matrizData, onEjecutarDecision 
           </p>
           <div>
             {q1Corte.map(a => (
-              <div key={a.documento} className="quad-row-item">
+              <div key={a.cohort_key || `${a.documento}-${a.semana}-${a.grupo}`} className="quad-row-item">
                 <div>
                   <strong>{a.nombre}</strong>
                   <span style={{ display: 'block', fontSize: '0.7rem', color: '#f87171' }}>
@@ -160,7 +160,7 @@ export default function MatrizIntervencionView({ matrizData, onEjecutarDecision 
           </p>
           <div>
             {q2Extension.map(a => (
-              <div key={a.documento} className="quad-row-item">
+              <div key={a.cohort_key || `${a.documento}-${a.semana}-${a.grupo}`} className="quad-row-item">
                 <div>
                   <strong>{a.nombre}</strong>
                   <span style={{ display: 'block', fontSize: '0.7rem', color: '#fbbf24' }}>

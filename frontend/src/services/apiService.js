@@ -23,6 +23,64 @@ export async function fetchDashboardResumen(filters = {}) {
   }
 }
 
+export async function fetchProyeccionCohorte(filters = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (filters.grupo) params.append('grupo', filters.grupo);
+    if (filters.campana) params.append('campana', filters.campana);
+    if (filters.formador) params.append('formador', filters.formador);
+    if (filters.semana) params.append('semana', filters.semana);
+
+    const queryString = params.toString();
+    const res = await fetch(`/api/ojt/proyeccion-cohorte${queryString ? `?${queryString}` : ''}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('⚠️ Error al consultar proyección de cohorte:', err.message);
+    return {
+      success: false,
+      cohorte: filters.grupo || 'General',
+      total_asesores: 0,
+      escenarios: []
+    };
+  }
+}
+
+export async function fetchDetalleAuditoria(filters = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (filters.grupo) params.append('grupo', filters.grupo);
+    if (filters.campana) params.append('campana', filters.campana);
+    if (filters.formador) params.append('formador', filters.formador);
+    if (filters.semana) params.append('semana', filters.semana);
+    if (filters.modalidad) params.append('modalidad', filters.modalidad);
+    if (filters.estado) params.append('estado', filters.estado);
+
+    const queryString = params.toString();
+    const res = await fetch(`/api/ojt/detalle-auditoria${queryString ? `?${queryString}` : ''}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('⚠️ Error al consultar detalle de auditoría:', err.message);
+    return { success: false, total_asesores: 0, asesores: [] };
+  }
+}
+
+export async function fetchCapacidadRys(filters = {}) {
+  const params = new URLSearchParams();
+  ['q', 'periodo', 'semana', 'segmento', 'campana', 'estado', 'modalidad'].forEach((k) => {
+    if (filters[k]) params.append(k, filters[k]);
+  });
+  if (filters.refresh) params.append('refresh', '1');
+  const qs = params.toString();
+  const res = await fetch(`/api/ojt/capacidad-rys${qs ? `?${qs}` : ''}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function registrarDecisionOperativa(decisionData) {
   try {
     const res = await fetch('/api/ojt/registrar-decision', {

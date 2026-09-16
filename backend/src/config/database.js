@@ -9,8 +9,13 @@ if (fs.existsSync(envPath)) {
   require('dotenv').config();
 }
 
-const connectionString = process.env.DATABASE_URL_SUPABASE || 
-  'postgresql://postgres.ymshmjwgekuqwrfqforg:ismael3953036POM@aws-1-us-west-2.pooler.supabase.com:6543/postgres';
+const connectionString = process.env.DATABASE_URL_SUPABASE;
+
+if (!connectionString) {
+  throw new Error(
+    'Falta DATABASE_URL_SUPABASE. Define la variable en backend/.env (local) o en las Environment Variables del proyecto (Vercel).'
+  );
+}
 
 const pool = new Pool({
   connectionString,

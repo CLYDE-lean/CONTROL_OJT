@@ -15,6 +15,10 @@ frontend/dist/
 build/
 *.log
 
+# Plataformas de despliegue
+.vercel
+.netlify
+
 # Archivos de SO e IDEs
 .DS_Store
 Thumbs.db

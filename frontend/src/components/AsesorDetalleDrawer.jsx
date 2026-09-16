@@ -1,5 +1,19 @@
 import React from 'react';
-import { X, User, ShieldCheck, PhoneCall, Award, Percent, Calendar, BookOpen, Clock, AlertTriangle, Building2, Tag, CheckCircle2, TrendingUp } from 'lucide-react';
+import { X } from 'lucide-react';
+import { KPI_OFICIALES, semaforoMayorMejor, colorSemaforoKpi } from '../utils/kpiOficiales';
+
+function fmtFecha(v) {
+  if (!v) return '—';
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (s.toUpperCase().startsWith('DÍA') || s.toUpperCase().startsWith('DIA')) return s;
+  return s;
+}
+
+function fmtPct(v) {
+  if (v === null || v === undefined || v === '' || Number.isNaN(parseFloat(v))) return '—';
+  return `${parseFloat(v)}%`;
+}
 
 export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecision }) {
   if (!asesor) return null;
@@ -11,8 +25,6 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
   const esBaja      = asesor.es_baja === 1 || 
                       asesor.estado_actual?.toUpperCase().includes('BAJA') || 
                       asesor.estado_actual?.toUpperCase().includes('CESADO');
-  const esBucle     = asesor.dia_logico_ojt > 8;
-  const diaActual   = asesor.dia_logico_ojt;
 
   return (
     <>
@@ -49,6 +61,11 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
               {asesor.nombre}
             </h3>
             <code style={{ fontSize: '0.78rem', color: '#1e6fc0', fontWeight: 700 }}>DNI: {asesor.documento}</code>
+            {(asesor.semana || asesor.grupo) && (
+              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
+                {[asesor.periodo, asesor.semana, asesor.grupo, asesor.campana].filter(Boolean).join(' · ')}
+              </div>
+            )}
           </div>
           <button 
             onClick={onClose}
@@ -92,6 +109,14 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
               <span style={{ fontSize: '0.68rem', color: '#7a90ad', display: 'block' }}>Formador</span>
               <strong style={{ fontSize: '0.8rem', color: '#0f1c2e' }}>{asesor.formador}</strong>
             </div>
+            <div style={{ background: '#f7f9fc', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #e8edf5' }}>
+              <span style={{ fontSize: '0.68rem', color: '#7a90ad', display: 'block' }}>Grupo</span>
+              <strong style={{ fontSize: '0.8rem', color: '#0f1c2e' }}>{asesor.grupo || '—'}</strong>
+            </div>
+            <div style={{ background: '#f7f9fc', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #e8edf5' }}>
+              <span style={{ fontSize: '0.68rem', color: '#7a90ad', display: 'block' }}>Semana</span>
+              <strong style={{ fontSize: '0.8rem', color: '#0f1c2e' }}>{asesor.semana || '—'}</strong>
+            </div>
           </div>
         </div>
 
@@ -104,12 +129,14 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.45rem' }}>
             <div style={{ background: '#ffffff', padding: '0.6rem 0.6rem', borderRadius: '8px', border: '2px solid #0284c7' }}>
               <span style={{ fontSize: '0.62rem', color: '#0369a1', display: 'block', fontWeight: 800, textTransform: 'uppercase' }}>
-                🎯 Días OJT Reales
+                Último día OJT
               </span>
               <strong style={{ fontSize: '1.15rem', color: '#0284c7', fontFamily: 'Outfit, sans-serif' }}>
-                {asesor.dias_ojt_reales || asesor.dias_conexion_ojt || asesor.dia_actual || 1} Días
+                Día {asesor.dias_ojt_reales || asesor.dia_actual || 1}
               </strong>
-              <span style={{ fontSize: '0.58rem', color: '#0369a1', display: 'block', fontWeight: 600 }}>Curva Oficial OJT</span>
+              <span style={{ fontSize: '0.58rem', color: '#0369a1', display: 'block', fontWeight: 600 }}>
+                {asesor.dias_conexion_ojt || (asesor.trayectoria || []).length} día(s) con registro
+              </span>
             </div>
 
             <div style={{ background: '#ffffff', padding: '0.6rem 0.6rem', borderRadius: '8px', border: '1px solid #e0eefe' }}>
@@ -123,11 +150,11 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
             </div>
 
             <div style={{ background: '#f8fafc', padding: '0.6rem 0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontSize: '0.62rem', color: '#64748b', display: 'block', fontWeight: 700, textTransform: 'uppercase' }}>Permanencia Total</span>
+              <span style={{ fontSize: '0.62rem', color: '#64748b', display: 'block', fontWeight: 700, textTransform: 'uppercase' }}>Filas en base</span>
               <strong style={{ fontSize: '1.05rem', color: '#334155', fontFamily: 'Outfit, sans-serif' }}>
-                {asesor.dias_totales_registrados || asesor.dias_conexion_ojt || asesor.dia_actual || 1} Días
+                {asesor.dias_totales_registrados || 0}
               </strong>
-              <span style={{ fontSize: '0.58rem', color: '#94a3b8', display: 'block' }}>Capa + Conexión</span>
+              <span style={{ fontSize: '0.58rem', color: '#94a3b8', display: 'block' }}>Capa + OJT (no son días de aula)</span>
             </div>
           </div>
 
@@ -145,16 +172,16 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', fontSize: '0.72rem' }}>
               <div>
                 <span style={{ color: '#7a90ad', display: 'block', fontSize: '0.63rem' }}>Inicio Capa</span>
-                <strong>{asesor.fecha_inicio_capa || 'Día 1 (Inicio Teórico)'}</strong>
+                <strong>{fmtFecha(asesor.fecha_inicio_capa)}</strong>
               </div>
               <div>
                 <span style={{ color: '#7a90ad', display: 'block', fontSize: '0.63rem' }}>Inicio OJT</span>
-                <strong style={{ color: '#1e6fc0' }}>{asesor.fecha_inicio_ojt || 'Día 1 (Conexión OJT)'}</strong>
+                <strong style={{ color: '#1e6fc0' }}>{fmtFecha(asesor.fecha_inicio_ojt)}</strong>
               </div>
               <div>
                 <span style={{ color: '#7a90ad', display: 'block', fontSize: '0.63rem' }}>Ingreso OP</span>
                 <strong style={{ color: esOperativo ? '#0d9488' : '#0f1c2e' }}>
-                  {asesor.fecha_ingreso_op || (esOperativo ? `Día ${asesor.dia_actual} de Conexión` : 'En proceso OJT')}
+                  {esOperativo ? fmtFecha(asesor.fecha_ingreso_op) : 'En proceso OJT'}
                 </strong>
               </div>
             </div>
@@ -163,22 +190,27 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
 
         {/* Tira de Evolución de 8 Días */}
         <div style={{ marginBottom: '1.25rem', background: '#f7f9fc', padding: '1rem', borderRadius: '10px', border: '1px solid #e8edf5' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f1c2e', marginBottom: '0.6rem' }}>
-            Evolución Diaria (D1 a D8)
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f1c2e', marginBottom: '0.35rem' }}>
+            Trazabilidad diaria (solo días con registro)
+          </div>
+          <div style={{ fontSize: '0.62rem', color: '#7a90ad', marginBottom: '0.6rem' }}>
+            Un recuadro apagado = no hay fila ese día. No se rellena por “llegó hasta D5”.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
-              const esPasado = d <= diaActual;
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((d) => {
+              const hit = (asesor.trayectoria || []).find((t) => Number(t.dia) === d);
               const esInduccion = d <= 2;
               const esExt = d >= 6;
+              const tag = hit
+                ? (hit.es_iop ? 'I-OP' : hit.es_baja ? 'Baja' : esInduccion ? 'Inducción' : esExt ? 'Extensión' : 'Medible')
+                : 'Sin registro';
 
               let bg = '#ffffff';
               let border = '#e8edf5';
-              let color = '#7a90ad';
-              let tag = esInduccion ? 'Inducción' : esExt ? 'Extensión' : 'Medible';
-
-              if (esPasado) {
-                if (esBaja) { bg = '#fff1f2'; border = '#fecdd3'; color = '#dc2626'; }
+              let color = '#94a3b8';
+              if (hit) {
+                if (hit.es_baja) { bg = '#fff1f2'; border = '#fecdd3'; color = '#dc2626'; }
+                else if (hit.es_iop) { bg = '#ccfbf1'; border = '#99f6e4'; color = '#0d9488'; }
                 else if (esInduccion) { bg = '#e0f2fe'; border = '#bae6fd'; color = '#0284c7'; }
                 else if (esExt) { bg = '#fef3c7'; border = '#fde68a'; color = '#d97706'; }
                 else { bg = '#ccfbf1'; border = '#99f6e4'; color = '#0d9488'; }
@@ -187,10 +219,16 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
               return (
                 <div key={d} style={{
                   background: bg, border: `1px solid ${border}`, borderRadius: '6px',
-                  padding: '0.4rem', textAlign: 'center', opacity: esPasado ? 1 : 0.4
+                  padding: '0.4rem', textAlign: 'center', opacity: hit ? 1 : 0.45
                 }}>
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color }}>Día {d}</div>
-                  <div style={{ fontSize: '0.6rem', color: '#7a90ad' }}>{tag}</div>
+                  <div style={{ fontSize: '0.58rem', color: '#64748b' }}>{tag}</div>
+                  {hit && (
+                    <div style={{ fontSize: '0.58rem', color: '#0f1c2e', marginTop: '2px', fontWeight: 600 }}>
+                      {hit.llamadas || 0} ll
+                      {hit.calidad_pct != null ? ` · C ${hit.calidad_pct}%` : ''}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -209,29 +247,29 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
                 {asesor.llamadas_acumuladas || asesor.llamadas_q || 0}
               </div>
               <div style={{ fontSize: '0.65rem', color: '#1e6fc0', fontWeight: 600 }}>
-                Prom: {asesor.promedio_llamadas || 0}/día · Últ: {asesor.llamadas_ultimo_dia || 0}
+                Promedio en días OJT: {asesor.promedio_llamadas || 0}/día · Último día: {asesor.llamadas_ultimo_dia || 0}
               </div>
             </div>
             <div style={{ background: '#f7f9fc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e8edf5' }}>
               <div style={{ fontSize: '0.68rem', color: '#7a90ad' }}>KPI 3: Calidad %</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: asesor.calidad_pct >= 80 ? '#0d9488' : '#d97706' }}>
-                {asesor.calidad_pct}%
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: colorSemaforoKpi(semaforoMayorMejor(asesor.calidad_pct, KPI_OFICIALES.calidad.meta, KPI_OFICIALES.calidad.objCump), 'card') }}>
+                {fmtPct(asesor.calidad_pct)}
               </div>
-              <div style={{ fontSize: '0.65rem', color: '#7a90ad' }}>Meta: ≥75%</div>
+              <div style={{ fontSize: '0.65rem', color: '#7a90ad' }}>SUM/SUM hasta I-OP · Meta ≥{KPI_OFICIALES.calidad.meta}%</div>
             </div>
             <div style={{ background: '#f7f9fc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e8edf5' }}>
               <div style={{ fontSize: '0.68rem', color: '#7a90ad' }}>KPI 1: Transferencia</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: asesor.transferencia_pct <= 15 ? '#0d9488' : '#dc2626' }}>
-                {asesor.transferencia_pct}%
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: colorSemaforoKpi(semaforoMayorMejor(asesor.transferencia_pct, KPI_OFICIALES.transferencia.meta, KPI_OFICIALES.transferencia.objCump), 'card') }}>
+                {fmtPct(asesor.transferencia_pct)}
               </div>
-              <div style={{ fontSize: '0.65rem', color: '#7a90ad' }}>Meta: ≤15%</div>
+              <div style={{ fontSize: '0.65rem', color: '#7a90ad' }}>SUM/SUM hasta I-OP · Meta ≥{KPI_OFICIALES.transferencia.meta}%</div>
             </div>
             <div style={{ background: '#f7f9fc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e8edf5' }}>
               <div style={{ fontSize: '0.68rem', color: '#7a90ad' }}>KPI 2: tNPS</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: asesor.tnps_pct >= 65 ? '#0d9488' : '#d97706' }}>
-                {asesor.tnps_pct}%
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: colorSemaforoKpi(semaforoMayorMejor(asesor.tnps_pct, KPI_OFICIALES.tnps.meta, KPI_OFICIALES.tnps.objCump), 'card') }}>
+                {fmtPct(asesor.tnps_pct)}
               </div>
-              <div style={{ fontSize: '0.65rem', color: '#7a90ad' }}>Meta: ≥65%</div>
+              <div style={{ fontSize: '0.65rem', color: '#7a90ad' }}>SUM/SUM hasta I-OP · Meta ≥{KPI_OFICIALES.tnps.meta}%</div>
             </div>
           </div>
         </div>

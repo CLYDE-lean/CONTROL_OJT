@@ -34,7 +34,7 @@ export default function EmbudoEjecutivoOjtView({ filters = {} }) {
   if (loading) {
     return (
       <div className="executive-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
-        <p style={{ color: 'var(--text-tertiary)' }}>⏳ Calculando Flujo Ejecutivo OJT $\rightarrow$ Operaciones...</p>
+        <p style={{ color: 'var(--text-tertiary)' }}>Calculando flujo ejecutivo OJT → operación…</p>
       </div>
     );
   }
@@ -60,7 +60,7 @@ export default function EmbudoEjecutivoOjtView({ filters = {} }) {
             Embudo Ejecutivo de Conversión: OJT a Operaciones (I-OP)
           </h2>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginTop: '0.25rem' }}>
-            Flujo de conversión real desde el ingreso a capacitación hasta la graduación a operaciones.
+            Flujo de conversión real desde el inicio de OJT (DIA_CONEXION = 1) hasta el primer I-OP.
           </p>
         </div>
         <span className="badge-exec badge-blue">Flujo de Conversión</span>

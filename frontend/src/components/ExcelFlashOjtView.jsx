@@ -173,7 +173,7 @@ export default function ExcelFlashOjtView({ filters = {} }) {
         </div>
       </div>
 
-      {/* ── BANNER DE CONTROL DE DESERCIÓN UMBRALES EXCEL (30% / 45% / 55%) ── */}
+      {/* ── BANNER DE CONTROL DE DESERCIÓN (meta de negocio 40%) ── */}
       <div style={{
         padding: '0.85rem 1.1rem',
         borderRadius: '10px',
@@ -190,7 +190,7 @@ export default function ExcelFlashOjtView({ filters = {} }) {
               Control de Deserción Pre-Operativa: {des.pct_desercion || 0}%
             </strong>
             <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-              Umbral Excel: 🟢 &le; 30% | 🟡 30.1% a 45% | 🔴 &gt; 45% (Total Bajas: {des.total_bajas || 0} de {des.total_evaluados || 0})
+              Umbral: 🟢 ≤ 40% | 🔴 > 40% (Total Bajas: {des.total_bajas || 0} de {des.total_evaluados || 0})
             </span>
           </div>
         </div>

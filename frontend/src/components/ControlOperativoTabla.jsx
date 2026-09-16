@@ -1,45 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Search, CheckCircle2, XCircle, Clock, BookOpen, Target, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight } from 'lucide-react';
 import AsesorDetalleDrawer from './AsesorDetalleDrawer';
+import { KPI_OFICIALES, semaforoMayorMejor, colorSemaforoKpi } from '../utils/kpiOficiales';
 
-function Sparkline({ data, target = 70, isLowerBetter = false, width = 45, height = 16 }) {
-  if (!data || !Array.isArray(data) || data.length === 0) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const points = data.map((val, idx) => {
-    const x = (idx / (data.length - 1 || 1)) * width;
-    const y = height - ((val - min) / range) * (height - 4) - 2;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-
-  const lastVal = data[data.length - 1];
-  const isGood = isLowerBetter ? lastVal <= target : lastVal >= target;
-  const strokeColor = isGood ? '#0d9488' : '#dc2626';
-
-  return (
-    <svg width={width} height={height} style={{ overflow: 'visible', display: 'inline-block' }}>
-      <polyline
-        fill="none"
-        stroke={strokeColor}
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={points}
-      />
-      {points.length > 0 && (() => {
-        const lastPt = points.split(' ').pop().split(',');
-        return (
-          <circle
-            cx={lastPt[0]}
-            cy={lastPt[1]}
-            r="2"
-            fill={strokeColor}
-          />
-        );
-      })()}
-    </svg>
-  );
+function fmtKpi(valor) {
+  if (valor === null || valor === undefined || valor === '' || Number.isNaN(parseFloat(valor))) return '—';
+  return `${parseFloat(valor)}%`;
 }
 
 export default function ControlOperativoTabla({ asesores, onEjecutarDecision, filtroInicial }) {
@@ -100,101 +66,129 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
   const caidasPendientesCount = asesores.filter(a => a.requiere_regularizacion || a.es_desconexion_sin_registro).length;
 
   const ordenados = [...asesoresFiltrados].sort((a, b) => {
-    if (ordenarPor === 'calidad')       return b.calidad_pct - a.calidad_pct;
-    if (ordenarPor === 'transferencia') return a.transferencia_pct - b.transferencia_pct;
-    if (ordenarPor === 'tnps')          return b.tnps_pct - a.tnps_pct;
+    if (ordenarPor === 'calidad')       return (parseFloat(b.calidad_pct) || -1) - (parseFloat(a.calidad_pct) || -1);
+    if (ordenarPor === 'transferencia') return (parseFloat(b.transferencia_pct) || -1) - (parseFloat(a.transferencia_pct) || -1);
+    if (ordenarPor === 'tnps')          return (parseFloat(b.tnps_pct) || -1) - (parseFloat(a.tnps_pct) || -1);
     if (ordenarPor === 'llamadas')      return (b.llamadas_q || 0) - (a.llamadas_q || 0);
     if (ordenarPor === 'dia')           return b.dia_logico_ojt - a.dia_logico_ojt;
     return 0;
   });
 
   return (
-    <div className="executive-card">
-
-      {/* Header */}
-      <div className="card-header-exec" style={{ marginBottom: '1rem', paddingBottom: '0.85rem', borderBottom: '1px solid #e8edf5' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <Table size={18} style={{ color: '#1e6fc0' }} />
-          <div>
-            <h2 className="card-title-exec" style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
-              Evolución Diaria (D1-D8) y Evaluación de Asesores OJT
-            </h2>
-            <p style={{ fontSize: '0.76rem', color: '#7a90ad', marginTop: '0.1rem' }}>
-              Haz clic en cualquier asesor para desplegar su Ficha Completa y métricas de asistencia.
-            </p>
-          </div>
-        </div>
-        <span className="badge-exec badge-neutral" style={{ fontWeight: 700, fontSize: '0.78rem' }}>
-          {ordenados.length} Asesores
-        </span>
-      </div>
-
-      {/* Leyenda Visual de Etapas con Íconos */}
+    <div style={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: 0,
+      overflow: 'hidden',
+      padding: '8px 12px',
+      boxSizing: 'border-box',
+      background: 'var(--card-bg, #0f172a)',
+      border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+      borderRadius: '10px',
+      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+      position: 'relative'
+    }}>
+      {/* ── Fila 1: Cabecera Corporativa ── */}
       <div style={{
-        display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'center',
-        padding: '0.75rem 1rem', background: '#f7f9fc', border: '1px solid #e8edf5',
-        borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.76rem'
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '6px',
+        flexShrink: 0
       }}>
-        <strong style={{ color: '#0f1c2e' }}>Etapas OJT:</strong>
-        
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0284c7', fontWeight: 600 }}>
-          <BookOpen size={14} /> D1 - D2: Inducción (No Medible)
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h2 style={{
+            fontSize: '0.84rem',
+            fontWeight: 700,
+            color: 'var(--text-primary, #f8fafc)',
+            fontFamily: "'Inter', sans-serif",
+            margin: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            Control operativo
+            <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500 }}>
+              (Evolución D1-D8)
+            </span>
+          </h2>
+          {/* Micro leyenda inline compacta */}
+          <span style={{ fontSize: '0.64rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
+            · <span style={{ color: '#38bdf8' }}>D1-D2</span> Inducción · <span style={{ color: '#3C9D5C' }}>D3-D5</span> Medible · <span style={{ color: '#D9822B' }}>D6-D8</span> Extensión
+          </span>
+        </div>
 
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0d9488', fontWeight: 600 }}>
-          <Target size={14} /> D3 - D5: Evaluación Medible (Aprobación)
-        </span>
-
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#d97706', fontWeight: 600 }}>
-          <Clock size={14} /> D6 - D8: Extensión Autorizada
+        <span style={{
+          fontSize: '0.64rem',
+          fontWeight: 600,
+          fontFamily: "'Inter', sans-serif",
+          color: '#38bdf8',
+          background: 'rgba(56, 189, 248, 0.12)',
+          border: '1px solid rgba(0, 240, 255, 0.35)',
+          padding: '2px 8px',
+          borderRadius: '6px',
+          boxShadow: '0 0 8px rgba(0, 240, 255, 0.2)'
+        }}>
+          {ordenados.length} ASESORES
         </span>
       </div>
 
-      {/* Controles de Búsqueda, Filtros y Ordenamiento */}
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-
-        {/* Buscador */}
-        <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
-          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7a90ad' }} />
+      {/* ── Fila 2: Barra de Filtros en una Sola Fila Horizontal (Ultra-Delgada ~30px) ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        marginBottom: '8px',
+        flexShrink: 0,
+        flexWrap: 'nowrap'
+      }}>
+        {/* Buscador Compacto */}
+        <div style={{ flex: 1, minWidth: '180px', position: 'relative' }}>
+          <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#00f0ff' }} />
           <input
             type="text"
-            placeholder="Buscar por DNI, Nombre, Campaña o Formador..."
+            placeholder="Buscar DNI, Nombre, Campaña, Formador..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             style={{
               width: '100%',
-              padding: '0.55rem 0.75rem 0.55rem 2.2rem',
-              background: '#f7f9fc',
-              border: '1px solid #dce3ee',
-              borderRadius: '8px',
-              color: '#0f1c2e',
-              fontSize: '0.83rem',
-              outline: 'none'
+              padding: '4px 8px 4px 26px',
+              background: 'rgba(7, 11, 20, 0.8)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              borderRadius: '6px',
+              color: '#f8fafc',
+              fontSize: '0.72rem',
+              fontFamily: 'monospace',
+              outline: 'none',
+              boxSizing: 'border-box'
             }}
           />
         </div>
 
-        {/* Botón de Alerta de Caídas Pendientes de Regularizar */}
+        {/* Botón de Alerta de Caídas Pendientes */}
         {caidasPendientesCount > 0 && (
           <button
             onClick={() => setFiltroResultado(filtroResultado === 'DESCONEXION' ? '' : 'DESCONEXION')}
             style={{
-              padding: '0.55rem 0.95rem',
-              background: filtroResultado === 'DESCONEXION' ? '#dc2626' : '#fff1f2',
-              color: filtroResultado === 'DESCONEXION' ? '#ffffff' : '#dc2626',
-              border: '1px solid #fecdd3',
-              borderRadius: '8px',
+              padding: '4px 8px',
+              background: filtroResultado === 'DESCONEXION' ? '#ff0055' : 'rgba(255, 0, 85, 0.15)',
+              color: '#ffffff',
+              border: '1px solid #ff0055',
+              borderRadius: '6px',
               fontWeight: 700,
-              fontSize: '0.8rem',
+              fontSize: '0.68rem',
+              fontFamily: 'monospace',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.4rem',
+              gap: '4px',
               cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(220, 38, 38, 0.15)',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 0 8px rgba(255, 0, 85, 0.35)',
               transition: 'all 0.15s ease'
             }}
           >
-            🚨 Caídas Sin Regularizar ({caidasPendientesCount})
+            🚨 Caídas ({caidasPendientesCount})
           </button>
         )}
 
@@ -203,25 +197,27 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
           value={filtroDia}
           onChange={(e) => setFiltroDia(e.target.value)}
           style={{
-            padding: '0.55rem 0.85rem',
-            background: '#f7f9fc',
-            border: '1px solid #dce3ee',
-            borderRadius: '8px',
-            color: '#0f1c2e',
-            fontSize: '0.82rem',
-            outline: 'none'
+            padding: '4px 6px',
+            background: 'rgba(7, 11, 20, 0.8)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: '6px',
+            color: '#cbd5e1',
+            fontSize: '0.68rem',
+            fontFamily: 'monospace',
+            outline: 'none',
+            cursor: 'pointer'
           }}
         >
-          <option value="">Todos los Días</option>
-          <option value="1">Día 1 (Inducción)</option>
-          <option value="2">Día 2 (Inducción)</option>
-          <option value="3">Día 3 (Inicio Evaluación)</option>
-          <option value="4">Día 4 (Evaluación)</option>
-          <option value="5">Día 5 (Evaluación Final)</option>
-          <option value="6">Día 6 (Extensión 1)</option>
-          <option value="7">Día 7 (Extensión 2)</option>
-          <option value="8">Día 8 (Máx Política)</option>
-          <option value="atipicos">🚨 Exceso (&gt;8 Días)</option>
+          <option value="" style={{ background: '#070b14' }}>Todos los Días</option>
+          <option value="1" style={{ background: '#070b14' }}>Día 1 (Inducción)</option>
+          <option value="2" style={{ background: '#070b14' }}>Día 2 (Inducción)</option>
+          <option value="3" style={{ background: '#070b14' }}>Día 3 (Inicio Eval.)</option>
+          <option value="4" style={{ background: '#070b14' }}>Día 4 (Evaluación)</option>
+          <option value="5" style={{ background: '#070b14' }}>Día 5 (Eval. Final)</option>
+          <option value="6" style={{ background: '#070b14' }}>Día 6 (Extensión 1)</option>
+          <option value="7" style={{ background: '#070b14' }}>Día 7 (Extensión 2)</option>
+          <option value="8" style={{ background: '#070b14' }}>Día 8 (Máx Política)</option>
+          <option value="atipicos" style={{ background: '#070b14' }}>🚨 Exceso (&gt;8D)</option>
         </select>
 
         {/* Filtro Resultado */}
@@ -229,21 +225,23 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
           value={filtroResultado}
           onChange={(e) => setFiltroResultado(e.target.value)}
           style={{
-            padding: '0.55rem 0.85rem',
-            background: '#f7f9fc',
-            border: '1px solid #dce3ee',
-            borderRadius: '8px',
-            color: '#0f1c2e',
-            fontSize: '0.82rem',
-            outline: 'none'
+            padding: '4px 6px',
+            background: 'rgba(7, 11, 20, 0.8)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: '6px',
+            color: '#cbd5e1',
+            fontSize: '0.68rem',
+            fontFamily: 'monospace',
+            outline: 'none',
+            cursor: 'pointer'
           }}
         >
-          <option value="">Todos los Resultados</option>
-          <option value="DESCONEXION">🚨 REGULARIZAR: Desconexión D1→D2</option>
-          <option value="APROBADO">🟢 APROBADO / EGRESADO A OP</option>
-          <option value="DESAPROBADO">🔴 DESAPROBADO / BAJA OJT</option>
-          <option value="INDUCCIÓN">🔵 INDUCCIÓN (D1-D2)</option>
-          <option value="EXTENSIÓN">🟠 EN EXTENSIÓN (D6-D8)</option>
+          <option value="" style={{ background: '#070b14' }}>Todos los Estados</option>
+          <option value="DESCONEXION" style={{ background: '#070b14' }}>🚨 Desconexión D1→D2</option>
+          <option value="APROBADO" style={{ background: '#070b14' }}>🟢 Aprobado / Operativo</option>
+          <option value="DESAPROBADO" style={{ background: '#070b14' }}>🔴 Desaprobado / Baja</option>
+          <option value="INDUCCIÓN" style={{ background: '#070b14' }}>🔵 Inducción (D1-D2)</option>
+          <option value="EXTENSIÓN" style={{ background: '#070b14' }}>🟠 En Extensión (D6-D8)</option>
         </select>
 
         {/* Ordenamiento */}
@@ -251,39 +249,56 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
           value={ordenarPor}
           onChange={(e) => setOrdenarPor(e.target.value)}
           style={{
-            padding: '0.55rem 0.85rem',
-            background: '#f0f7ff',
-            border: '1px solid #1e6fc0',
-            borderRadius: '8px',
-            color: '#1e6fc0',
-            fontWeight: 600,
-            fontSize: '0.82rem',
-            outline: 'none'
+            padding: '4px 8px',
+            background: 'rgba(0, 240, 255, 0.15)',
+            border: '1px solid #00f0ff',
+            borderRadius: '6px',
+            color: '#00f0ff',
+            fontWeight: 700,
+            fontSize: '0.68rem',
+            fontFamily: 'monospace',
+            outline: 'none',
+            cursor: 'pointer'
           }}
         >
-          <option value="calidad">Ordenar: KPI 3 Calidad %</option>
-          <option value="transferencia">Ordenar: KPI 1 Transferencia %</option>
-          <option value="tnps">Ordenar: KPI 2 tNPS %</option>
-          <option value="llamadas">Ordenar: Productividad (Llamadas)</option>
-          <option value="dia">Ordenar: Día OJT Alcanzado</option>
+          <option value="calidad" style={{ background: '#070b14' }}>Ordenar: Calidad %</option>
+          <option value="transferencia" style={{ background: '#070b14' }}>Ordenar: Transf. %</option>
+          <option value="tnps" style={{ background: '#070b14' }}>Ordenar: tNPS %</option>
+          <option value="llamadas" style={{ background: '#070b14' }}>Ordenar: Llamadas</option>
+          <option value="dia" style={{ background: '#070b14' }}>Ordenar: Día OJT</option>
         </select>
       </div>
 
-      {/* Tabla de Alta Densidad con Scroll Contenido y Encabezados Fijados */}
-      <div style={{ width: '100%', maxHeight: '600px', overflowY: 'auto', overflowX: 'auto', border: '1px solid #e8edf5', borderRadius: '10px' }}>
-        <table className="exec-table" style={{ margin: 0 }}>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <tr>
-              <th>DNI / Asesor</th>
-              <th style={{ minWidth: '160px' }}>Campaña &amp; Formador</th>
-              <th style={{ textAlign: 'center' }}>Evolución (D1 → D8)</th>
-              <th style={{ textAlign: 'center' }}>Ingreso a Operación (I-OP)</th>
-              <th style={{ textAlign: 'center' }}>Evaluación Final</th>
-              <th style={{ textAlign: 'center' }}>Llamadas</th>
-              <th style={{ textAlign: 'center' }}>KPI 1: Transf. %</th>
-              <th style={{ textAlign: 'center' }}>KPI 2: tNPS %</th>
-              <th style={{ textAlign: 'center' }}>KPI 3: Calidad %</th>
-              <th style={{ textAlign: 'center', minWidth: '140px', whiteSpace: 'nowrap' }}>Acción</th>
+      {/* ── Tabla Cyberpunk de Máxima Altura (Scroll Interno Sticky Header) ── */}
+      <div style={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'auto',
+        border: '1px solid rgba(56, 189, 248, 0.2)',
+        borderRadius: '8px',
+        background: 'rgba(7, 11, 20, 0.6)'
+      }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', margin: 0 }}>
+          <thead style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: '#070b14',
+            borderBottom: '1px solid rgba(0, 240, 255, 0.35)',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
+          }}>
+            <tr style={{ color: '#00f0ff', fontFamily: 'monospace', fontSize: '0.62rem', letterSpacing: '0.04em' }}>
+              <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 700 }}>DNI / ASESOR</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left', minWidth: '150px', fontWeight: 700 }}>CAMPAÑA &amp; FORMADOR</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>EVOLUCIÓN (D1 → D8)</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>INGRESO A OP (I-OP)</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>EVALUACIÓN FINAL</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>LLAMADAS</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>KPI 1: TRANSF.</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>KPI 2: tNPS</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>KPI 3: CALIDAD</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', minWidth: '130px', fontWeight: 700 }}>ACCIÓN</th>
             </tr>
           </thead>
           <tbody>
@@ -298,56 +313,73 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
 
               return (
                 <tr
-                  key={`${a.documento}-${idx}`}
+                  key={a.cohort_key || `${a.documento}-${a.semana}-${a.grupo}-${idx}`}
                   onClick={() => setAsesorSeleccionado(a)}
                   style={{
                     cursor: 'pointer',
-                    background: esBucle ? '#fff1f2' : esBaja ? '#fafafa' : undefined,
+                    background: esBucle ? 'rgba(255, 0, 85, 0.1)' : esBaja ? 'rgba(15, 23, 42, 0.4)' : idx % 2 === 0 ? 'rgba(30, 41, 59, 0.4)' : 'transparent',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
                     transition: 'background 0.15s ease'
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.08)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = esBucle ? 'rgba(255, 0, 85, 0.1)' : esBaja ? 'rgba(15, 23, 42, 0.4)' : idx % 2 === 0 ? 'rgba(30, 41, 59, 0.4)' : 'transparent'}
                   title="Haz clic para ver la Ficha Completa del Asesor"
                 >
-                  
                   {/* DNI & Asesor */}
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <td style={{ padding: '6px 8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <div>
-                        <div style={{ fontWeight: 700, color: '#0f1c2e', fontSize: '0.84rem' }}>
+                        <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.76rem', whiteSpace: 'nowrap' }}>
                           {a.nombre || a.asesor || 'SIN NOMBRE'}
                         </div>
-                        <code style={{ fontSize: '0.73rem', color: '#1e6fc0', fontWeight: 600 }}>{a.documento || a.dni || ''}</code>
+                        <code style={{ fontSize: '0.66rem', color: '#00f0ff', fontFamily: 'monospace', fontWeight: 600 }}>
+                          {a.documento || a.dni || ''}
+                        </code>
+                        {(a.semana || a.grupo) && (
+                          <div style={{ fontSize: '0.6rem', color: '#64748b', marginTop: '2px' }}>
+                            {[a.semana, a.grupo].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
                       </div>
-                      <ChevronRight size={14} style={{ color: '#7a90ad', marginLeft: 'auto' }} />
+                      <ChevronRight size={12} style={{ color: '#64748b', marginLeft: 'auto' }} />
                     </div>
                   </td>
 
                   {/* Campaña & Formador */}
-                  <td style={{ maxWidth: '180px' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f1c2e', display: 'block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.campana}>{a.campana}</div>
-                    <div style={{ fontSize: '0.72rem', color: '#7a90ad', display: 'block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.formador}>{a.formador}</div>
+                  <td style={{ padding: '6px 8px', maxWidth: '160px' }}>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 600, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.campana}>
+                      {a.campana}
+                    </div>
+                    <div style={{ fontSize: '0.64rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.formador}>
+                      {a.formador}
+                    </div>
                   </td>
 
-                  {/* Tira Visual de Evolución de 8 Días con Íconos */}
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                  {/* Tira Visual de Evolución D1 a D8 */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <div style={{ display: 'inline-flex', gap: '3px', alignItems: 'center' }}>
                       {[1, 2, 3, 4, 5, 6, 7, 8].map(d => {
-                        const esDiaPasado = d <= diaActual;
+                        const hit = Array.isArray(a.trayectoria)
+                          ? a.trayectoria.find((t) => Number(t.dia) === d)
+                          : (d <= diaActual ? { dia: d } : null);
                         const esInduccion = d <= 2;
                         const esExtension = d >= 6;
                         
-                        let bg = '#e8edf5';
-                        let color = '#7a90ad';
+                        let bg = 'rgba(56, 189, 248, 0.08)';
+                        let color = '#64748b';
+                        let border = '1px solid transparent';
 
-                        if (esDiaPasado) {
-                          if (esBaja) {
-                            bg = '#fecdd3'; color = '#dc2626';
+                        if (hit) {
+                          if (hit.es_baja || esBaja) {
+                            bg = 'rgba(255, 0, 85, 0.15)'; color = '#ff0055'; border = '1px solid rgba(255, 0, 85, 0.35)';
+                          } else if (hit.es_iop || (esOperativo && d === diaActual)) {
+                            bg = 'rgba(0, 255, 157, 0.15)'; color = '#00ff9d'; border = '1px solid rgba(0, 255, 157, 0.35)';
                           } else if (esInduccion) {
-                            bg = '#e0f2fe'; color = '#0284c7'; // Azul Inducción
+                            bg = 'rgba(0, 240, 255, 0.15)'; color = '#00f0ff'; border = '1px solid rgba(0, 240, 255, 0.35)';
                           } else if (esExtension) {
-                            bg = '#fef3c7'; color = '#d97706'; // Ámbar Extensión
+                            bg = 'rgba(255, 183, 3, 0.15)'; color = '#ffb703'; border = '1px solid rgba(255, 183, 3, 0.35)';
                           } else {
-                            bg = a.calidad_pct >= 75 ? '#ccfbf1' : '#fef3c7'; 
-                            color = a.calidad_pct >= 75 ? '#0d9488' : '#d97706'; // Verde Medible
+                            bg = 'rgba(0, 255, 157, 0.12)'; color = '#00ff9d'; border = '1px solid rgba(0, 255, 157, 0.28)';
                           }
                         }
 
@@ -358,184 +390,181 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
                               e.stopPropagation();
                               setAsesorSeleccionado(a);
                             }}
-                            title={
-                              esInduccion
-                                ? `Día ${d}: Inducción (No Medible en Nota)`
-                                : d <= 5
-                                ? `Día ${d}: Evaluación Medible (Aprobación)`
-                                : `Día ${d}: Extensión Autorizada`
-                            }
+                            title={hit
+                              ? `D${d} con registro${hit.llamadas != null ? ` · ${hit.llamadas} llamadas` : ''}`
+                              : `D${d} sin registro`}
                             style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '2px',
-                              padding: '2px 5px',
-                              borderRadius: '5px',
+                              padding: '1px 4px',
+                              borderRadius: '4px',
                               background: bg,
                               color: color,
-                              fontSize: '0.64rem',
+                              border: d === diaActual && hit ? '1px solid #00f0ff' : border,
+                              fontSize: '0.62rem',
+                              fontFamily: 'monospace',
                               fontWeight: 700,
-                              border: d === diaActual ? `1px solid ${color}` : 'none',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              opacity: hit ? 1 : 0.35
                             }}
                           >
-                            {esInduccion ? <BookOpen size={10} /> : esExtension ? <Clock size={10} /> : <Target size={10} />}
                             D{d}
                           </div>
                         );
                       })}
                       {esBucle && (
-                        <div style={{ padding: '2px 5px', borderRadius: '4px', background: '#fee2e2', color: '#dc2626', fontSize: '0.64rem', fontWeight: 800 }}>
+                        <div style={{ padding: '1px 4px', borderRadius: '4px', background: 'rgba(255, 0, 85, 0.25)', color: '#ff0055', border: '1px solid #ff0055', fontSize: '0.62rem', fontFamily: 'monospace', fontWeight: 800 }}>
                           &gt;8D
                         </div>
                       )}
                     </div>
                   </td>
 
-                  {/* Transición / Ingreso a Operación (Días de Conexión) */}
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: esOperativo ? '#0d9488' : esBaja ? '#dc2626' : '#0284c7' }}>
-                      {esOperativo ? `🟢 Día ${diaActual} OP` : esBaja ? `🔴 Cesado D${diaActual}` : `🔵 Día ${diaActual} OJT`}
+                  {/* Transición / Ingreso a Operación */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <div style={{
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      color: esOperativo ? '#00ff9d' : esBaja ? '#ff0055' : '#00f0ff',
+                      textShadow: esOperativo ? '0 0 6px rgba(0, 255, 157, 0.4)' : esBaja ? '0 0 6px rgba(255, 0, 85, 0.4)' : 'none'
+                    }}>
+                      {esOperativo ? `🟢 DÍA ${diaActual} OP` : esBaja ? `🔴 CESADO D${diaActual}` : `🔵 DÍA ${diaActual} OJT`}
                     </div>
-                    <span style={{ fontSize: '0.67rem', color: '#7a90ad', fontWeight: 600 }}>
-                      {a.dias_conexion_ojt || diaActual} días conexión
+                    <span style={{ fontSize: '0.6rem', color: '#64748b', fontFamily: 'monospace' }}>
+                      {a.dias_conexion_ojt || diaActual}d conexión
                     </span>
                   </td>
 
-                  {/* Evaluación Final (Aprobó / Desaprobó) */}
-                  <td style={{ textAlign: 'center' }}>
-                    <span className={`badge-exec ${
-                      (a.requiere_regularizacion || a.es_desconexion_sin_registro) ? 'badge-red' :
-                      a.resultado_evaluacion?.includes('APROBADO') ? 'badge-green' :
-                      a.resultado_evaluacion?.includes('DESAPROBADO') ? 'badge-red' :
-                      a.resultado_evaluacion?.includes('INDUCCIÓN') ? 'badge-blue' : 'badge-amber'
-                    }`}>
-                      {(a.requiere_regularizacion || a.es_desconexion_sin_registro) ? '🚨 DESCONEXIÓN D1→D2' : a.resultado_evaluacion}
+                  {/* Evaluación Final */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '0.62rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      display: 'inline-block',
+                      color: (a.requiere_regularizacion || a.es_desconexion_sin_registro) ? '#ff0055' :
+                             a.resultado_evaluacion?.includes('APROBADO') ? '#00ff9d' :
+                             a.resultado_evaluacion?.includes('DESAPROBADO') ? '#ff0055' :
+                             a.resultado_evaluacion?.includes('INDUCCIÓN') ? '#00f0ff' : '#ffb703',
+                      background: (a.requiere_regularizacion || a.es_desconexion_sin_registro) ? 'rgba(255, 0, 85, 0.15)' :
+                                  a.resultado_evaluacion?.includes('APROBADO') ? 'rgba(0, 255, 157, 0.15)' :
+                                  a.resultado_evaluacion?.includes('DESAPROBADO') ? 'rgba(255, 0, 85, 0.15)' :
+                                  a.resultado_evaluacion?.includes('INDUCCIÓN') ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 183, 3, 0.15)',
+                      border: `1px solid ${
+                        (a.requiere_regularizacion || a.es_desconexion_sin_registro) ? 'rgba(255, 0, 85, 0.4)' :
+                        a.resultado_evaluacion?.includes('APROBADO') ? 'rgba(0, 255, 157, 0.4)' :
+                        a.resultado_evaluacion?.includes('DESAPROBADO') ? 'rgba(255, 0, 85, 0.4)' :
+                        a.resultado_evaluacion?.includes('INDUCCIÓN') ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 183, 3, 0.4)'
+                      }`
+                    }}>
+                      {(a.requiere_regularizacion || a.es_desconexion_sin_registro) ? '🚨 DESCONEXIÓN' : a.resultado_evaluacion}
                     </span>
                     {a.motivo_baja && (
-                      <div style={{ fontSize: '0.67rem', color: '#dc2626', marginTop: '0.2rem', maxWidth: '130px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.motivo_baja}>
+                      <div style={{ fontSize: '0.6rem', color: '#ff0055', marginTop: '2px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.motivo_baja}>
                         {a.motivo_baja}
                       </div>
                     )}
                   </td>
 
                   {/* Productividad (Llamadas) */}
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={{ fontSize: '0.86rem', fontWeight: 800, color: (a.llamadas_q || 0) > 0 ? '#0f1c2e' : '#7a90ad' }}>
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800, fontFamily: 'monospace', color: (a.llamadas_q || 0) > 0 ? '#f8fafc' : '#64748b' }}>
                       {a.llamadas_q || 0}
                     </span>
                   </td>
 
-                  {/* KPI 1: Transferencia % + Sparkline */}
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <Sparkline
-                        data={a.historico_transf || [Math.min(100, (a.transferencia_pct || 0) + 8), Math.min(100, (a.transferencia_pct || 0) + 3), a.transferencia_pct || 0]}
-                        target={15}
-                        isLowerBetter={true}
-                      />
-                      <span style={{
-                        fontSize: '0.82rem', fontWeight: 800,
-                        color: a.transferencia_pct <= 15 ? '#0d9488' : a.transferencia_pct <= 25 ? '#d97706' : '#dc2626'
-                      }}>
-                        {a.transferencia_pct}%
-                      </span>
-                    </div>
+                  {/* KPI 1: Transferencia */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      color: colorSemaforoKpi(semaforoMayorMejor(a.transferencia_pct, KPI_OFICIALES.transferencia.meta, KPI_OFICIALES.transferencia.objCump))
+                    }}>
+                      {fmtKpi(a.transferencia_pct)}
+                    </span>
                   </td>
 
-                  {/* KPI 2: tNPS % + Sparkline */}
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <Sparkline
-                        data={a.historico_tnps || [Math.max(0, (a.tnps_pct || 0) - 10), Math.max(0, (a.tnps_pct || 0) - 4), a.tnps_pct || 0]}
-                        target={55}
-                      />
-                      <span style={{
-                        fontSize: '0.82rem', fontWeight: 800,
-                        color: a.tnps_pct >= 65 ? '#0d9488' : a.tnps_pct >= 45 ? '#d97706' : '#dc2626'
-                      }}>
-                        {a.tnps_pct}%
-                      </span>
-                    </div>
+                  {/* KPI 2: tNPS */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      color: colorSemaforoKpi(semaforoMayorMejor(a.tnps_pct, KPI_OFICIALES.tnps.meta, KPI_OFICIALES.tnps.objCump))
+                    }}>
+                      {fmtKpi(a.tnps_pct)}
+                    </span>
                   </td>
 
-                  {/* KPI 3: Calidad % + Sparkline */}
-                  <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <Sparkline
-                        data={a.historico_calidad || [Math.max(0, (a.calidad_pct || 0) - 12), Math.max(0, (a.calidad_pct || 0) - 5), a.calidad_pct || 0]}
-                        target={75}
-                      />
-                      <span style={{
-                        fontSize: '0.85rem', fontWeight: 800,
-                        color: a.calidad_pct >= 80 ? '#0d9488' : a.calidad_pct >= 70 ? '#d97706' : '#dc2626'
-                      }}>
-                        {a.calidad_pct}%
-                      </span>
-                    </div>
+                  {/* KPI 3: Calidad */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      color: colorSemaforoKpi(semaforoMayorMejor(a.calidad_pct, KPI_OFICIALES.calidad.meta, KPI_OFICIALES.calidad.objCump))
+                    }}>
+                      {fmtKpi(a.calidad_pct)}
+                    </span>
                   </td>
 
-                  {/* Acción */}
-                  <td style={{ textAlign: 'center', minWidth: '140px', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                  {/* Acción Cyberpunk */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
                     {esOperativo ? (
-                      <span className="badge-status-pill badge-status-verde">
-                        🟢 En Operación
+                      <span style={{ fontSize: '0.64rem', fontFamily: 'monospace', fontWeight: 700, color: '#00ff9d', background: 'rgba(0, 255, 157, 0.12)', border: '1px solid rgba(0, 255, 157, 0.35)', padding: '2px 8px', borderRadius: '6px' }}>
+                        🟢 OPERATIVO
                       </span>
                     ) : esBaja ? (
-                      <span className="badge-status-pill badge-status-rojo">
-                        🔴 Baja OJT
+                      <span style={{ fontSize: '0.64rem', fontFamily: 'monospace', fontWeight: 700, color: '#ff0055', background: 'rgba(255, 0, 85, 0.12)', border: '1px solid rgba(255, 0, 85, 0.35)', padding: '2px 8px', borderRadius: '6px' }}>
+                        🔴 BAJA OJT
                       </span>
                     ) : (a.requiere_regularizacion || a.es_desconexion_sin_registro) ? (
                       <button
-                        className="badge-status-pill badge-status-rojo touch-target"
-                        style={{ cursor: 'pointer', background: '#fff1f2', border: '1px solid #fecdd3', color: '#dc2626', fontWeight: 800 }}
+                        style={{ cursor: 'pointer', background: 'rgba(255, 0, 85, 0.2)', border: '1px solid #ff0055', color: '#ffffff', fontWeight: 800, fontSize: '0.64rem', fontFamily: 'monospace', padding: '2px 8px', borderRadius: '6px', boxShadow: '0 0 6px rgba(255, 0, 85, 0.4)' }}
                         onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Regularizar Desconexión D1-D2', a.nombre || a.asesor)}
                       >
-                        🚨 Regularizar
+                        🚨 REGULARIZAR
                       </button>
                     ) : esBucle ? (
                       <button
-                        className="badge-status-pill badge-status-rojo touch-target"
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'pointer', background: 'rgba(255, 0, 85, 0.2)', border: '1px solid #ff0055', color: '#ff0055', fontWeight: 800, fontSize: '0.64rem', fontFamily: 'monospace', padding: '2px 8px', borderRadius: '6px' }}
                         onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Corte Bucle Exceso', a.nombre || a.asesor)}
                       >
-                        🚨 Corte Bucle
+                        🚨 CORTE BUCLE
                       </button>
                     ) : a.calidad_pct < 65 && diaActual >= 3 ? (
                       <button
-                        className="badge-status-pill badge-status-rojo touch-target"
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'pointer', background: 'rgba(255, 183, 3, 0.15)', border: '1px solid #ffb703', color: '#ffb703', fontWeight: 700, fontSize: '0.64rem', fontFamily: 'monospace', padding: '2px 8px', borderRadius: '6px' }}
                         onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Corte Preventivo', a.nombre || a.asesor)}
                       >
-                        ⚠️ Corte Preventivo
+                        ⚠️ CORTE PREV.
                       </button>
                     ) : diaActual >= 6 ? (
                       <button
-                        className="badge-status-pill badge-status-amber touch-target"
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'pointer', background: 'rgba(255, 183, 3, 0.15)', border: '1px solid #ffb703', color: '#ffb703', fontWeight: 700, fontSize: '0.64rem', fontFamily: 'monospace', padding: '2px 8px', borderRadius: '6px' }}
                         onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Aprobar Extensión', a.nombre || a.asesor)}
                       >
-                        ⏳ Extensión
+                        ⏳ EXTENSIÓN
                       </button>
                     ) : (
                       <button
-                        className="badge-status-pill badge-status-blue touch-target"
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'pointer', background: 'rgba(0, 240, 255, 0.15)', border: '1px solid #00f0ff', color: '#00f0ff', fontWeight: 700, fontSize: '0.64rem', fontFamily: 'monospace', padding: '2px 8px', borderRadius: '6px' }}
                         onClick={() => onEjecutarDecision && onEjecutarDecision(a.documento || a.dni, 'Acompañamiento Coaching', a.nombre || a.asesor)}
                       >
-                        ⚡ Coaching
+                        ⚡ COACHING
                       </button>
                     )}
                   </td>
-
                 </tr>
               );
             })}
 
             {ordenados.length === 0 && (
               <tr>
-                <td colSpan="9" style={{ textAlign: 'center', padding: '2.5rem', color: '#7a90ad', fontSize: '0.85rem' }}>
-                  No se encontraron asesores que coincidan con los criterios seleccionados.
+                <td colSpan="10" style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                  NO SE ENCONTRARON ASESORES CON LOS CRITERIOS SELECCIONADOS.
                 </td>
               </tr>
             )}
@@ -551,7 +580,6 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
           onEjecutarDecision={onEjecutarDecision}
         />
       )}
-
     </div>
   );
 }

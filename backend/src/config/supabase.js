@@ -18,13 +18,14 @@ if (fs.existsSync(envPath)) {
 
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymshmjwgekuqwrfqforg.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltc2htandnZWt1cXdyZnFmb3JnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNzQ5NzAsImV4cCI6MjA5OTY1MDk3MH0.5DmW7GVhf9bOrq3CBlb7wFI--vGQyapjOXmBOf2Ihx4';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || null;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('❌ Faltan variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY');
-  process.exit(1);
+  throw new Error(
+    'Faltan SUPABASE_URL o SUPABASE_ANON_KEY. Defínelas en backend/.env (local) o en las Environment Variables del proyecto (Vercel).'
+  );
 }
 
 // Cliente público (anon) — para lecturas de datos del dashboard

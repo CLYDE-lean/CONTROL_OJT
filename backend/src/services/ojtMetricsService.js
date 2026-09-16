@@ -13,14 +13,79 @@ class OjtMetricsService {
     this.CACHE_TTL = 10 * 60 * 1000; // 10 minutos
   }
 
-  isIop(sigla, estado) {
+  isIop(sigla) {
     const s = String(sigla || '').trim().toUpperCase();
-    const e = String(estado || '').trim().toUpperCase();
     return (
       s === 'I-OP' || s === 'I - OP' || s === 'I_OP' ||
-      s.includes('I-OP') || s.includes('OPERACION') || s.includes('OPERATIVO') ||
-      e.includes('OPERACION') || e.includes('OPERATIVO')
+      s.includes('I-OP')
     );
+  }
+
+  /**
+   * Indicadores & Ponderaciones Oficiales (tabla Flash OJT).
+   * Meta = cumplimiento; objCump = piso de alerta. KPIs 1-3 son mayor_mejor.
+   */
+  kpiOficiales() {
+    return {
+      transferencia: { meta: 75, objCump: 65, peso: 0.20 },
+      tnps: { meta: 73, objCump: 65, peso: 0.40 },
+      calidad: { meta: 73, objCump: 65, peso: 0.40 },
+      desercion: { meta: 40 }
+    };
+  }
+
+  pctFromSum(num, denom) {
+    return denom > 0 ? Math.round((num / denom) * 1000) / 10 : null;
+  }
+
+  semaforoMayorMejor(valor, meta, objCump) {
+    if (valor === null || valor === undefined) return 'ROJO';
+    if (valor >= meta) return 'VERDE';
+    if (valor >= objCump) return 'AMARILLO';
+    return 'ROJO';
+  }
+
+  /**
+   * KPI Num/Denom por persona: filas OJT hasta (sin incluir posteriores a) I-OP.
+   * Misma regla que getMatrizIntervencion por asesor.
+   */
+  summarizeAdvisorOjtKpis(userRows) {
+    const rows = userRows.slice().sort((a, b) => {
+      if (a.fecha_asistencia && b.fecha_asistencia && a.fecha_asistencia !== b.fecha_asistencia) {
+        return a.fecha_asistencia.localeCompare(b.fecha_asistencia);
+      }
+      return (a.row_index || 0) - (b.row_index || 0);
+    });
+
+    let pasoAOperacion = false;
+    let kpi1_n = 0, kpi1_d = 0, kpi2_n = 0, kpi2_d = 0, kpi3_n = 0, kpi3_d = 0;
+    let max_dia = 1;
+    let es_iop = 0;
+    let es_baja = 0;
+
+    for (const r of rows) {
+      if (r.es_ojt_row) {
+        if (!pasoAOperacion) {
+          kpi1_n += parseFloat(r.kpi1_num) || 0;
+          kpi1_d += parseFloat(r.kpi1_denom) || 0;
+          kpi2_n += parseFloat(r.kpi2_num) || 0;
+          kpi2_d += parseFloat(r.kpi2_denom) || 0;
+          kpi3_n += parseFloat(r.kpi3_num) || 0;
+          kpi3_d += parseFloat(r.kpi3_denom) || 0;
+          const diaVal = parseInt(r.raw_dia_conexion || r.dia_conexion) || 1;
+          if (diaVal > max_dia) max_dia = diaVal;
+        }
+        if (this.isIop(r.sigla)) {
+          es_iop = 1;
+          pasoAOperacion = true;
+        }
+        if (this.isBaja(r.estado, r.motivo_baja)) es_baja = 1;
+      } else {
+        if (this.isBaja(r.estado, r.motivo_baja)) es_baja = 1;
+      }
+    }
+
+    return { kpi1_n, kpi1_d, kpi2_n, kpi2_d, kpi3_n, kpi3_d, max_dia, es_iop, es_baja };
   }
 
   isBaja(estado, motivoBaja, ultEstado) {
@@ -72,7 +137,7 @@ class OjtMetricsService {
             TRIM(CAST(${cols.estadoCol} AS VARCHAR)) as estado,
             TRIM(CAST(${cols.siglaCol} AS VARCHAR)) as sigla,
             TRIM(CAST(${cols.motivoBajaCol} AS VARCHAR)) as motivo_baja,
-            CAST(${cols.qAtendidasCol} AS VARCHAR) as q_atendidas,
+            CAST(${cols.qAtendidasDiaCol || cols.qAtendidasCol} AS VARCHAR) as q_atendidas,
             CAST(${cols.kpi1NumCol} AS VARCHAR) as kpi1_num,
             CAST(${cols.kpi1DenomCol} AS VARCHAR) as kpi1_denom,
             CAST(${cols.kpi2NumCol} AS VARCHAR) as kpi2_num,
@@ -86,7 +151,8 @@ class OjtMetricsService {
             ${cols.tipoReclutadoCol ? `TRIM(CAST(${cols.tipoReclutadoCol} AS VARCHAR))` : "'APTO'"} as tipo_reclutado,
             ${cols.segmentoCol ? `TRIM(CAST(${cols.segmentoCol} AS VARCHAR))` : "'GENERAL'"} as segmento,
             ${cols.periodoCol ? `TRIM(CAST(${cols.periodoCol} AS VARCHAR))` : "''"} as periodo_raw,
-            CAST(NULLIF(REGEXP_REPLACE(CAST("DIA_CONEXION" AS VARCHAR), '[^0-9]', '', 'g'), '') AS INT) as dia_conexion_raw
+            ${cols.jornadaCol ? `TRIM(CAST(${cols.jornadaCol} AS VARCHAR))` : "''"} as jornada_raw,
+            CAST(NULLIF(REGEXP_REPLACE(CAST(${cols.diaConexionCol} AS VARCHAR), '[^0-9]', '', 'g'), '') AS INT) as dia_conexion_raw
           FROM public."${active.table}"
         `;
 
@@ -120,11 +186,12 @@ class OjtMetricsService {
             estado: (r.estado || '').toUpperCase(),
             sigla: (r.sigla || '').toUpperCase(),
             motivo_baja: r.motivo_baja || '',
+            jornada: (r.jornada_raw || '').trim().toUpperCase(),
             tipo_reclutado: r.tipo_reclutado || 'APTO',
             segmento: r.segmento || 'GENERAL',
             raw_dia_conexion: diaConex,
             es_ojt_row: diaConex !== null && diaConex > 0,
-            dia_conexion: diaConex || 1,
+            dia_conexion: (diaConex && diaConex > 0) ? diaConex : 0,
             q_atendidas: parseFloat((r.q_atendidas || '0').replace(/[^0-9\.]/g, '')) || 0,
             kpi1_num: parseFloat((r.kpi1_num || '0').replace(/[^0-9\.]/g, '')) || 0,
             kpi1_denom: parseFloat((r.kpi1_denom || '0').replace(/[^0-9\.]/g, '')) || 0,
@@ -158,7 +225,7 @@ class OjtMetricsService {
 
   async getActiveTable(client = db) {
     if (this.cachedActiveTable) return this.cachedActiveTable;
-    const candidateTables = ['CONTROL', 'control', 'Control', 'base_ojt', 'base_OJT', 'BASE_OJT'];
+    const candidateTables = ['vw_ojt_diario', 'VW_OJT_DIARIO', 'CONTROL', 'control', 'Control', 'base_ojt', 'base_OJT', 'BASE_OJT'];
     for (const tbl of candidateTables) {
       try {
         const cols = await this.getColumnNames(tbl);
@@ -201,6 +268,8 @@ class OjtMetricsService {
         siglaCol: findCol(['SIGLA']) || '"SIGLA"',
         motivoBajaCol: findCol(['MOTIVO_BAJA', 'MOTIVO']) || '"MOTIVO_BAJA"',
         qAtendidasCol: findCol(['Q_ATENDIDAS', 'LLAMADAS']) || '"Q_ATENDIDAS"',
+        qAtendidasDiaCol: findCol(['Q_ATENDIDAS_DIA', 'Q_ATENDIDAS_DELTA', 'LLAMADAS_DIA', 'LLAMADAS_DELTA']),
+        diaConexionCol: findCol(['DIA_CONEXION_OJT', 'DIA_CONEXION_CORREGIDO', 'DIA_CONEXION', 'DIA_CONEX', 'DIA_CONEXION_REAL']) || '"DIA_CONEXION"',
         kpi1NumCol: findCol(['KPI_1_NUM']) || '"KPI_1_Num"',
         kpi1DenomCol: findCol(['KPI_1_DENOM']) || '"KPI_1_Denom"',
         kpi2NumCol: findCol(['KPI_2_NUM']) || '"KPI_2_Num"',
@@ -213,17 +282,19 @@ class OjtMetricsService {
         fechaIngresoOpCol: findCol(['FECHA_INGRESO_OP', 'FECHA_OP', 'FEC_ING_OP', 'FECHA_EGRESO', 'FECHA_I_OP']) || null,
         tipoReclutadoCol: findCol(['TIPO_RECLUTADO', 'TIPO_RECLUTAMIENTO', 'RECLUTADO', 'FUENTE']) || null,
         segmentoCol: findCol(['SEGMENTO', 'LINEA', 'LINEA_NEGOCIO']) || null,
-        periodoCol: findCol(['PERIODO', 'PERIODO_PROCESO', 'MES', 'PERIODO_OJT', 'ANIO_MES']) || null
+        periodoCol: findCol(['PERIODO', 'PERIODO_PROCESO', 'MES', 'PERIODO_OJT', 'ANIO_MES']) || null,
+        jornadaCol: findCol(['JORNADA', 'TIPO_JORNADA', 'HORARIO', 'TIPO_HORARIO', 'REGIMEN', 'HORAS', 'MODALIDAD_HORARIO', 'TIPO_CONTRATO']) || null
       };
     } catch (e) {
       return {
         dniCol: '"DNI"', asesorCol: '"ASESOR"', formadorCol: '"FORMADOR"', campanaCol: '"CAMPAÑA"',
         grupoCol: '"COD_GRUPO"', semanaCol: '"SEMANA"', modalidadCol: '"MODALIDAD"', estadoCol: '"ESTADO"',
         siglaCol: '"SIGLA"', motivoBajaCol: '"MOTIVO_BAJA"', qAtendidasCol: '"Q_ATENDIDAS"',
+        qAtendidasDiaCol: null, diaConexionCol: '"DIA_CONEXION"',
         kpi1NumCol: '"KPI_1_Num"', kpi1DenomCol: '"KPI_1_Denom"', kpi2NumCol: '"KPI_2_Num"',
         kpi2DenomCol: '"KPI_2_Denom"', kpi3NumCol: '"KPI_3_Num"', kpi3DenomCol: '"KPI_3_Denom"',
         fechaAsistenciaCol: null, fechaInicioCol: null, fechaOjtCol: null, fechaIngresoOpCol: null,
-        tipoReclutadoCol: null, segmentoCol: null, periodoCol: null
+        tipoReclutadoCol: null, segmentoCol: null, periodoCol: null, jornadaCol: null
       };
     }
   }
@@ -234,6 +305,73 @@ class OjtMetricsService {
     if (str === '' || str === 'NULL' || str === 'UNDEFINED') return true;
     if (str.startsWith('TODO') || str.startsWith('TODA') || str.startsWith('ALL') || str.startsWith('SIN FILTRO')) return true;
     return false;
+  }
+
+  /**
+   * Una persona puede cesar en un aula y reingresar en otra (otro grupo/semana).
+   * No agrupar solo por DNI: mezcla baja + I-OP.
+   */
+  cohortKey(r) {
+    const dni = String(r.dni || '').trim();
+    const semana = String(r.semana || '').trim().toUpperCase();
+    const grupo = String(r.grupo || '').trim().toUpperCase();
+    return `${dni}|${semana}|${grupo}`;
+  }
+
+  /**
+   * Ciclo OJT de una persona (DNI+semana+grupo).
+   * D1 = primer DIA_CONEXION = 1. Capacitación (DIA_CONEXION vacío) no cuenta.
+   * I-OP: primer SIGLA I-OP en una fila con día de conexión; los I-OP siguientes se ignoran.
+   */
+  summarizeOjtCycle(userRows) {
+    const rows = (userRows || []).slice().sort((a, b) => {
+      if (a.fecha_asistencia && b.fecha_asistencia && a.fecha_asistencia !== b.fecha_asistencia) {
+        return a.fecha_asistencia.localeCompare(b.fecha_asistencia);
+      }
+      return (a.row_index || 0) - (b.row_index || 0);
+    });
+
+    let maxDiaOjt = 0;
+    let diaIop = null;
+    let esIop = 0;
+    let esBajaOjt = 0;
+    let esBajaPre = 0;
+    let entroOjt = 0;
+    let asistioD1 = 0;
+
+    for (const r of rows) {
+      const dia = parseInt(r.raw_dia_conexion, 10);
+      const esDiaOjt = r.es_ojt_row === true || (Number.isFinite(dia) && dia >= 1);
+
+      if (!esDiaOjt) {
+        if (entroOjt === 0 && this.isBaja(r.estado, r.motivo_baja)) esBajaPre = 1;
+        continue;
+      }
+
+      if (esIop === 1) continue;
+
+      entroOjt = 1;
+      if (dia === 1 && r.fecha_asistencia) asistioD1 = 1;
+      if (dia > maxDiaOjt) maxDiaOjt = dia;
+
+      if (this.isIop(r.sigla)) {
+        esIop = 1;
+        diaIop = dia;
+        maxDiaOjt = dia;
+      }
+      if (this.isBaja(r.estado, r.motivo_baja)) esBajaOjt = 1;
+    }
+
+    return {
+      entro_ojt: entroOjt,
+      asistio_d1: asistioD1,
+      max_dia_ojt: maxDiaOjt,
+      dia_iop: diaIop,
+      es_iop: esIop,
+      es_baja: esBajaOjt,
+      es_baja_pre: esBajaPre,
+      dia_efectivo: esIop === 1 ? diaIop : maxDiaOjt
+    };
   }
 
   filterCache(data, filters = {}) {
@@ -252,38 +390,26 @@ class OjtMetricsService {
       return data;
     }
 
-    const matchingDnis = new Set();
+    const out = [];
     for (let i = 0; i < data.length; i++) {
       const r = data[i];
-      const rCampana   = String(r.campana || '').toUpperCase();
-      const rFormador  = String(r.formador || '').toUpperCase();
-      const rGrupo     = String(r.grupo || '').toUpperCase();
-      const rSemana    = String(r.semana || '').toUpperCase();
-      const rModalidad = String(r.modalidad || '').toUpperCase();
-      const rEstado    = String(r.estado || '').toUpperCase();
-      const rPeriodo   = String(r.periodo || '').toUpperCase();
-      const rSegmento  = String(r.segmento || '').toUpperCase();
-
-      if (campanaFilter   && !rCampana.includes(campanaFilter)) continue;
-      if (formadorFilter  && !rFormador.includes(formadorFilter)) continue;
-      if (grupoFilter     && !rGrupo.includes(grupoFilter)) continue;
-      if (semanaFilter    && !rSemana.includes(semanaFilter)) continue;
-      if (modalidadFilter && !rModalidad.includes(modalidadFilter)) continue;
-      if (estadoFilter    && !rEstado.includes(estadoFilter)) continue;
-      if (periodoFilter   && !rPeriodo.includes(periodoFilter)) continue;
-      if (segmentoFilter  && !rSegmento.includes(segmentoFilter)) continue;
-
-      const key = r.dni || r.asesor || i;
-      matchingDnis.add(key);
+      if (periodoFilter   && !String(r.periodo || '').toUpperCase().includes(periodoFilter)) continue;
+      if (semanaFilter    && !String(r.semana || '').toUpperCase().includes(semanaFilter)) continue;
+      if (segmentoFilter  && !String(r.segmento || '').toUpperCase().includes(segmentoFilter)) continue;
+      if (campanaFilter   && !String(r.campana || '').toUpperCase().includes(campanaFilter)) continue;
+      if (grupoFilter     && !String(r.grupo || '').toUpperCase().includes(grupoFilter)) continue;
+      if (formadorFilter  && !String(r.formador || '').toUpperCase().includes(formadorFilter)) continue;
+      if (modalidadFilter && !String(r.modalidad || '').toUpperCase().includes(modalidadFilter)) continue;
+      if (estadoFilter    && !String(r.estado || '').toUpperCase().includes(estadoFilter)) continue;
+      out.push(r);
     }
-
-    return data.filter((r, idx) => matchingDnis.has(r.dni || r.asesor || idx));
+    return out;
   }
 
   async getFiltrosDisponibles(filters = {}) {
     const data = await this.ensureCache();
 
-    const dimensiones = ['formador', 'campana', 'grupo', 'segmento', 'modalidad', 'estado', 'periodo', 'semana'];
+    const dimensiones = ['periodo', 'semana', 'segmento', 'campana', 'grupo', 'formador', 'modalidad', 'estado'];
     const resKeyMap = {
       formador:  'formadores',
       campana:   'campanas',
@@ -307,15 +433,19 @@ class OjtMetricsService {
       semanas: []
     };
 
-    for (const dim of dimensiones) {
-      const filtrosSinDim = { ...filters };
-      delete filtrosSinDim[dim];
+    for (let i = 0; i < dimensiones.length; i++) {
+      const dim = dimensiones[i];
+      const filtrosPadre = {};
+      for (let j = 0; j < i; j++) {
+        const parent = dimensiones[j];
+        if (!this.isDummy(filters[parent])) filtrosPadre[parent] = filters[parent];
+      }
 
-      const subset = this.filterCache(data, filtrosSinDim);
+      const subset = this.filterCache(data, filtrosPadre);
       const setValues = new Set();
 
-      for (let i = 0; i < subset.length; i++) {
-        const val = subset[i][dim];
+      for (let k = 0; k < subset.length; k++) {
+        const val = subset[k][dim];
         if (val && !this.isDummy(val) && !String(val).toUpperCase().startsWith('SIN ')) {
           setValues.add(val);
         }
@@ -338,6 +468,9 @@ class OjtMetricsService {
       return {
         filtros_aplicados: filters,
         total_asesores_unicos: 0,
+        base_ojt: 0,
+        iniciaron_ojt_d1: 0,
+        bajas_pre_ojt: 0,
         total_unicos_base_datos: allData.length,
         max_dia_detectado: 5,
         dias_principales_1_8: [],
@@ -348,43 +481,31 @@ class OjtMetricsService {
       };
     }
 
-    const asesorMap = new Map();
+    const rowsByCohorte = new Map();
     for (let i = 0; i < filteredRows.length; i++) {
       const r = filteredRows[i];
-      if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, { max_dia_ojt: 0, max_dia_total: 0, es_iop: 0, es_baja: 0, entro_ojt: 0 });
-      }
-      const a = asesorMap.get(r.dni);
-      if (this.isIop(r.sigla, r.estado)) {
-        a.es_iop = 1;
-        a.entro_ojt = 1;
-      }
-      if (r.es_ojt_row || r.sigla === 'A' || (r.raw_dia_conexion && r.raw_dia_conexion >= 1)) {
-        a.entro_ojt = 1;
-      }
-      if (r.es_ojt_row && r.raw_dia_conexion > a.max_dia_ojt) {
-        a.max_dia_ojt = r.raw_dia_conexion;
-      }
-      if (r.dia_conexion > a.max_dia_total) a.max_dia_total = r.dia_conexion;
-      if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
+      const key = this.cohortKey(r);
+      if (!rowsByCohorte.has(key)) rowsByCohorte.set(key, []);
+      rowsByCohorte.get(key).push(r);
     }
 
-    // AUDITORÍA DE INGRESO A OJT: Filtrar solo asesores que llegaron a la etapa OJT
+    const asesorMap = new Map();
+    for (const [key, rows] of rowsByCohorte.entries()) {
+      asesorMap.set(key, this.summarizeOjtCycle(rows));
+    }
+
     const ojtAsesorMap = new Map();
     let bajasPreOjtCount = 0;
 
-    for (const [dni, info] of asesorMap.entries()) {
-      const llegoAOjt = info.entro_ojt === 1 || info.max_dia_ojt >= 1 || info.es_iop === 1;
-      if (llegoAOjt) {
-        // Garantizar dia_ojt mínimo de 1 para quienes entraron a OJT
-        if (info.max_dia_ojt < 1) info.max_dia_ojt = 1;
-        ojtAsesorMap.set(dni, info);
-      } else if (info.es_baja === 1) {
+    for (const [key, info] of asesorMap.entries()) {
+      if (info.asistio_d1 === 1) {
+        ojtAsesorMap.set(key, info);
+      } else if (info.es_baja_pre === 1) {
         bajasPreOjtCount++;
       }
     }
 
-    const totalUnicos = asesorMap.size || 945;
+    const totalUnicos = asesorMap.size;
     const diasData = [];
     const maxDiaGeneral = 15;
 
@@ -396,7 +517,7 @@ class OjtMetricsService {
       let bajasAcum = 0;
 
       for (const [dni, info] of ojtAsesorMap.entries()) {
-        const diaEfectivo = (info.es_iop === 1 && info.max_dia_ojt === 1) ? info.max_dia_total : info.max_dia_ojt;
+        const diaEfectivo = info.dia_efectivo || info.max_dia_ojt;
         
         if (diaEfectivo >= d) {
           activosTotal++;
@@ -422,10 +543,11 @@ class OjtMetricsService {
 
       if (activosTotal === 0 && d > 8) break;
 
-      const retencion = ((activosTotal / totalUnicos) * 100).toFixed(1);
-      const activosPct = parseFloat(((activosOjt / totalUnicos) * 100).toFixed(1));
-      const egresadosPct = parseFloat(((egresadosDia / totalUnicos) * 100).toFixed(1));
-      const bajasPct = parseFloat(((bajasDia / totalUnicos) * 100).toFixed(1));
+      const baseOjt = ojtAsesorMap.size || 1;
+      const retencion = ((activosTotal / baseOjt) * 100).toFixed(1);
+      const activosPct = parseFloat(((activosOjt / baseOjt) * 100).toFixed(1));
+      const egresadosPct = parseFloat(((egresadosDia / baseOjt) * 100).toFixed(1));
+      const bajasPct = parseFloat(((bajasDia / baseOjt) * 100).toFixed(1));
 
       let labelText = `Día ${d}`;
       if (d === 1) labelText = `Día 1 (Ingreso Total)`;
@@ -469,14 +591,62 @@ class OjtMetricsService {
       llegaron_op: totalIopCount
     };
 
+    // 3. DISTRIBUCIÓN DEL ÚLTIMO DÍA ALCANZADO (DESERTORES / BAJAS)
+    const distUltimoDia = {
+      sin_gestion: 0,
+      d1: 0,
+      d2: 0,
+      d3: 0,
+      d4: 0,
+      d5: 0,
+      d5_plus: 0,
+      total_desertores: 0
+    };
+
+    for (const [, info] of asesorMap.entries()) {
+      if (info.es_baja === 1 && info.es_iop === 0) {
+        distUltimoDia.total_desertores++;
+        if (info.entro_ojt === 0 || info.max_dia_ojt === 0) {
+          distUltimoDia.sin_gestion++;
+        } else if (info.max_dia_ojt === 1) {
+          distUltimoDia.d1++;
+        } else if (info.max_dia_ojt === 2) {
+          distUltimoDia.d2++;
+        } else if (info.max_dia_ojt === 3) {
+          distUltimoDia.d3++;
+        } else if (info.max_dia_ojt === 4) {
+          distUltimoDia.d4++;
+        } else if (info.max_dia_ojt === 5) {
+          distUltimoDia.d5++;
+        } else {
+          distUltimoDia.d5_plus++;
+        }
+      }
+    }
+
+    const distTot = distUltimoDia.total_desertores || 1;
+    const distribucionUltimoDia = [
+      { dia: 'Sin gestión', count: distUltimoDia.sin_gestion, pct: Math.round((distUltimoDia.sin_gestion / distTot) * 100), color: '#64748b' },
+      { dia: 'D1', count: distUltimoDia.d1, pct: Math.round((distUltimoDia.d1 / distTot) * 100), color: '#ef4444' },
+      { dia: 'D2', count: distUltimoDia.d2, pct: Math.round((distUltimoDia.d2 / distTot) * 100), color: '#f97316' },
+      { dia: 'D3', count: distUltimoDia.d3, pct: Math.round((distUltimoDia.d3 / distTot) * 100), color: '#eab308' },
+      { dia: 'D4', count: distUltimoDia.d4, pct: Math.round((distUltimoDia.d4 / distTot) * 100), color: '#38bdf8' },
+      { dia: 'D5', count: distUltimoDia.d5, pct: Math.round((distUltimoDia.d5 / distTot) * 100), color: '#818cf8' },
+      { dia: '> D5', count: distUltimoDia.d5_plus, pct: Math.round((distUltimoDia.d5_plus / distTot) * 100), color: '#a855f7' }
+    ];
+
     return {
       filtros_aplicados: filters,
       total_asesores_unicos: totalUnicos,
+      base_ojt: ojtAsesorMap.size,
+      iniciaron_ojt_d1: ojtAsesorMap.size,
+      bajas_pre_ojt: bajasPreOjtCount,
       max_dia_detectado: Math.max(...diasData.map(d => d.dia), 5),
       dias_principales_1_8: diasPrincipales1to8,
       dias_restantes_9_plus: diasRestantes9Plus,
       tiene_dias_restantes: diasRestantes9Plus.length > 0,
       funnel: diasData,
+      distribucion_ultimo_dia: distribucionUltimoDia,
       supervivencia,
       analisis: {
         diagnostico: `Evaluados ${totalUnicos} asesores únicos`,
@@ -492,31 +662,26 @@ class OjtMetricsService {
     const allData = await this.ensureCache();
     const filteredRows = this.filterCache(allData, filters);
 
-    const asesorMap = new Map();
+    const rowsByCohorte = new Map();
     for (let i = 0; i < filteredRows.length; i++) {
       const r = filteredRows[i];
-      if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, { max_dia: 1, es_iop: 0, es_baja: 0 });
-      }
-      const a = asesorMap.get(r.dni);
-      if (r.dia_conexion > a.max_dia) a.max_dia = r.dia_conexion;
-      if (this.isIop(r.sigla, r.estado)) a.es_iop = 1;
-      if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
+      const key = this.cohortKey(r);
+      if (!rowsByCohorte.has(key)) rowsByCohorte.set(key, []);
+      rowsByCohorte.get(key).push(r);
     }
 
-    const totalIngresaron = asesorMap.size;
+    let totalIngresaron = 0;
     let totalBajas = 0;
     let totalEgresadosOp = 0;
     let totalEnCurso = 0;
 
-    for (const [dni, a] of asesorMap.entries()) {
-      if (a.es_iop === 1) {
-        totalEgresadosOp++;
-      } else if (a.es_baja === 1) {
-        totalBajas++;
-      } else {
-        totalEnCurso++;
-      }
+    for (const rows of rowsByCohorte.values()) {
+      const info = this.summarizeOjtCycle(rows);
+      if (info.entro_ojt !== 1) continue;
+      totalIngresaron++;
+      if (info.es_iop === 1) totalEgresadosOp++;
+      else if (info.es_baja === 1) totalBajas++;
+      else totalEnCurso++;
     }
 
     const pctEgresados = totalIngresaron > 0 ? Math.round((totalEgresadosOp / totalIngresaron) * 1000) / 10 : 0;
@@ -538,48 +703,118 @@ class OjtMetricsService {
   }
 
   /**
-   * 3. ROI DE EXTENSIONES EN MEMORIA (< 2ms)
+   * 3. ROI DE EXTENSIONES
+   * Extensión = llegó a D6+ de DIA_CONEXION sin haber ingresado a operación en D1–D5.
+   * Costo hundido = solo días de extensión (máx. 3) de quienes se dieron de baja sin I-OP.
    */
   async getRoiExtensiones(filters = {}) {
+    const TARIFA_OJT = 25;
+    const TARIFA_CAPA = 25;
     const allData = await this.ensureCache();
     const filteredRows = this.filterCache(allData, filters);
 
-    const asesorMap = new Map();
+    const rowsByCohorte = new Map();
     for (let i = 0; i < filteredRows.length; i++) {
       const r = filteredRows[i];
-      if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, { max_dia_ojt: 1, es_iop: 0, es_baja: 0, paso_op: false });
-      }
-      const a = asesorMap.get(r.dni);
-
-      if (this.isIop(r.sigla, r.estado)) {
-        a.es_iop = 1;
-        a.paso_op = true;
-      }
-      if (!a.paso_op && r.es_ojt_row) {
-        const diaVal = parseInt(r.raw_dia_conexion || r.dia_conexion) || 1;
-        if (diaVal > a.max_dia_ojt) a.max_dia_ojt = diaVal;
-      }
-      if (this.isBaja(r.estado, r.motivo_baja)) {
-        a.es_baja = 1;
-      }
+      const key = this.cohortKey(r);
+      if (!rowsByCohorte.has(key)) rowsByCohorte.set(key, []);
+      rowsByCohorte.get(key).push(r);
     }
 
     let totalEnviadosExtension = 0;
     let totalExcesoPolitica = 0;
     let egresadosPostExtension = 0;
     let caidosPostExtension = 0;
+    let enCursoExtension = 0;
+    let diasExtensionFallidos = 0;
+    let diasCapaPerdidos = 0;
+    const porFormador = new Map();
+    const porCampana = new Map();
+    const porDiaExt = {
+      1: { dias_ext: 1, etiqueta: 'Día 6 (1 extra)', n: 0, convertidos: 0, fallidos: 0, en_curso: 0, soles_ext: 0 },
+      2: { dias_ext: 2, etiqueta: 'Día 7 (2 extra)', n: 0, convertidos: 0, fallidos: 0, en_curso: 0, soles_ext: 0 },
+      3: { dias_ext: 3, etiqueta: 'Día 8 (3 extra)', n: 0, convertidos: 0, fallidos: 0, en_curso: 0, soles_ext: 0 }
+    };
 
-    for (const [dni, info] of asesorMap.entries()) {
-      if (info.max_dia_ojt >= 6) totalEnviadosExtension++;
-      if (info.max_dia_ojt > 8 && info.es_iop === 0) totalExcesoPolitica++;
-      if (info.max_dia_ojt >= 6 && info.es_iop === 1) egresadosPostExtension++;
-      if (info.max_dia_ojt >= 6 && info.es_baja === 1 && info.es_iop === 0) caidosPostExtension++;
+    const bump = (map, name, patch) => {
+      const k = String(name || 'SIN DATO').trim() || 'SIN DATO';
+      if (!map.has(k)) map.set(k, { nombre: k, n: 0, convertidos: 0, fallidos: 0, soles_ext: 0 });
+      const g = map.get(k);
+      g.n += patch.n || 0;
+      g.convertidos += patch.convertidos || 0;
+      g.fallidos += patch.fallidos || 0;
+      g.soles_ext += patch.soles_ext || 0;
+    };
+
+    const diasEntre = (a, b) => {
+      if (!a || !b) return 0;
+      const da = new Date(a);
+      const db = new Date(b);
+      if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return 0;
+      return Math.max(0, Math.round((db - da) / 86400000));
+    };
+
+    for (const [, rows] of rowsByCohorte.entries()) {
+      const info = this.summarizeOjtCycle(rows);
+      if (info.entro_ojt !== 1) continue;
+
+      const iopAntesDeExt = info.es_iop === 1 && Number(info.dia_iop) > 0 && Number(info.dia_iop) <= 5;
+      if (iopAntesDeExt) continue;
+
+      const diaFin = info.es_iop === 1 ? Number(info.dia_iop) : info.max_dia_ojt;
+      if (diaFin < 6) continue;
+
+      const diasExt = Math.max(0, Math.min(3, Math.min(diaFin, 8) - 5));
+      const convirtio = info.es_iop === 1;
+      const fallida = !convirtio && info.es_baja === 1;
+
+      totalEnviadosExtension++;
+      if (diaFin > 8 && !convirtio) totalExcesoPolitica++;
+      if (convirtio) egresadosPostExtension++;
+      else if (fallida) caidosPostExtension++;
+      else enCursoExtension++;
+
+      const sample = rows.find((r) => r.fecha_inicio_capa && r.fecha_inicio_ojt)
+        || rows.find((r) => r.formador || r.campana)
+        || rows[0]
+        || {};
+      const patch = { n: 1, convertidos: convirtio ? 1 : 0, fallidos: 0, soles_ext: 0 };
+
+      if (fallida) {
+        const soles = diasExt * TARIFA_OJT;
+        diasExtensionFallidos += diasExt;
+        const capa = diasEntre(sample.fecha_inicio_capa, sample.fecha_inicio_ojt) || 0;
+        diasCapaPerdidos += capa;
+        patch.fallidos = 1;
+        patch.soles_ext = soles;
+      }
+
+      bump(porFormador, sample.formador, patch);
+      bump(porCampana, sample.campana, patch);
+
+      const bucket = Math.max(1, Math.min(3, diasExt || 1));
+      const d = porDiaExt[bucket];
+      d.n += 1;
+      if (convirtio) d.convertidos += 1;
+      else if (fallida) {
+        d.fallidos += 1;
+        d.soles_ext += patch.soles_ext;
+      } else d.en_curso += 1;
     }
 
-    const tasaExito = totalEnviadosExtension > 0 
-      ? Math.round((egresadosPostExtension / totalEnviadosExtension) * 100) 
+    const tasaExito = totalEnviadosExtension > 0
+      ? Math.round((egresadosPostExtension / totalEnviadosExtension) * 1000) / 10
       : 0;
+    const impactoExt = diasExtensionFallidos * TARIFA_OJT;
+    const impactoCapa = diasCapaPerdidos * TARIFA_CAPA;
+    const rank = (map) => Array.from(map.values())
+      .map((g) => ({
+        ...g,
+        soles_ext: Math.round(g.soles_ext),
+        conversion_pct: g.n > 0 ? Math.round((g.convertidos / g.n) * 1000) / 10 : 0
+      }))
+      .sort((a, b) => b.soles_ext - a.soles_ext)
+      .slice(0, 6);
 
     return {
       metricas: {
@@ -587,13 +822,32 @@ class OjtMetricsService {
         total_exceso_politica_8d: totalExcesoPolitica,
         egresados_post_extension: egresadosPostExtension,
         caidos_post_extension: caidosPostExtension,
-        tasa_exito_extension_pct: tasaExito
+        en_curso_extension: enCursoExtension,
+        tasa_exito_extension_pct: tasaExito,
+        tarifa_diaria_ojt_pen: TARIFA_OJT,
+        tarifa_diaria_capa_pen: TARIFA_CAPA,
+        dias_extension_fallidos: diasExtensionFallidos,
+        impacto_extension_fallida_pen: Math.round(impactoExt),
+        impacto_ciclo_perdido_pen: Math.round(impactoExt + impactoCapa),
+        dias_capa_perdidos: diasCapaPerdidos
+      },
+      desagregado: {
+        formadores: rank(porFormador),
+        campanas: rank(porCampana),
+        por_dia_ext: [1, 2, 3].map((k) => {
+          const d = porDiaExt[k];
+          return {
+            ...d,
+            soles_ext: Math.round(d.soles_ext),
+            conversion_pct: d.n > 0 ? Math.round((d.convertidos / d.n) * 1000) / 10 : 0
+          };
+        })
       },
       evaluacion: {
         estado: tasaExito >= 60 ? 'POLÍTICA RENTABLE' : 'EVALUAR EXTENSIONES',
-        regla_negocio: totalExcesoPolitica > 0 
-          ? `⚠️ ${totalExcesoPolitica} asesores superaron los 8 días. Aplicar corte estricto.` 
-          : 'Cumplimiento perfecto de la ventana oficial.'
+        regla_negocio: caidosPostExtension > 0
+          ? `Costo hundido de extensiones fallidas: S/ ${Math.round(impactoExt).toLocaleString('es-PE')} (${caidosPostExtension} bajas, ${diasExtensionFallidos} días extra × S/ ${TARIFA_OJT}). Quien convirtió no se cuenta como pérdida.`
+          : 'No hay bajas post-extensión en el filtro: no hay costo hundido de extensión.'
       }
     };
   }
@@ -608,20 +862,19 @@ class OjtMetricsService {
     const rowsByDni = new Map();
     for (let i = 0; i < filteredRows.length; i++) {
       const r = filteredRows[i];
-      if (!rowsByDni.has(r.dni)) rowsByDni.set(r.dni, []);
-      rowsByDni.get(r.dni).push(r);
+      if (!rowsByDni.has(this.cohortKey(r))) rowsByDni.set(this.cohortKey(r), []);
+      rowsByDni.get(this.cohortKey(r)).push(r);
     }
 
     const asesores = [];
-    for (const [dni, userRows] of rowsByDni.entries()) {
-      const sample = userRows[0];
-
+    for (const [, userRows] of rowsByDni.entries()) {
       userRows.sort((a, b) => {
         if (a.fecha_asistencia && b.fecha_asistencia && a.fecha_asistencia !== b.fecha_asistencia) {
           return a.fecha_asistencia.localeCompare(b.fecha_asistencia);
         }
         return (a.row_index || 0) - (b.row_index || 0);
       });
+      const sample = userRows[0];
 
       let maxDiaOjt = 1;
       let esIop = 0;
@@ -639,8 +892,11 @@ class OjtMetricsService {
       let kpi3NumSum = 0, kpi3DenomSum = 0;
       let diasConexionCount = 0;
       let pasoAOperacion = false;
+      let jornadaAsesor = sample.jornada || '';
+      const byDia = new Map();
 
       for (const r of userRows) {
+        if (!jornadaAsesor && r.jornada) jornadaAsesor = r.jornada;
         if (!fechaInicioCapa && r.fecha_inicio_capa) fechaInicioCapa = r.fecha_inicio_capa;
         if (!fechaInicioCapa && r.fecha_asistencia) fechaInicioCapa = r.fecha_asistencia;
 
@@ -665,9 +921,24 @@ class OjtMetricsService {
             kpi2NumSum += valKpi2N; kpi2DenomSum += valKpi2D;
             kpi3NumSum += valKpi3N; kpi3DenomSum += valKpi3D;
             diasConexionCount++;
+
+            const dKey = maxDiaOjt;
+            if (!byDia.has(dKey)) {
+              byDia.set(dKey, {
+                dia: dKey,
+                fecha: r.fecha_asistencia || r.fecha_inicio_ojt || '',
+                q: 0, k1n: 0, k1d: 0, k2n: 0, k2d: 0, k3n: 0, k3d: 0, iop: 0, baja: 0
+              });
+            }
+            const day = byDia.get(dKey);
+            day.q += valQ;
+            day.k1n += valKpi1N; day.k1d += valKpi1D;
+            day.k2n += valKpi2N; day.k2d += valKpi2D;
+            day.k3n += valKpi3N; day.k3d += valKpi3D;
+            if (!day.fecha && r.fecha_asistencia) day.fecha = r.fecha_asistencia;
           }
 
-          if (this.isIop(r.sigla, r.estado)) {
+          if (this.isIop(r.sigla)) {
             esIop = 1;
             pasoAOperacion = true;
             if (diaGraduacionOp === null) {
@@ -677,28 +948,39 @@ class OjtMetricsService {
               if (r.fecha_ingreso_op) fechaIngresoOp = r.fecha_ingreso_op;
               else if (r.fecha_asistencia) fechaIngresoOp = r.fecha_asistencia;
             }
+            const dayIop = byDia.get(diaGraduacionOp);
+            if (dayIop) dayIop.iop = 1;
           }
 
           if (this.isBaja(r.estado, r.motivo_baja)) {
             esBaja = 1;
             motivoBaja = r.motivo_baja || 'Baja en OJT';
+            const dBaja = parseInt(r.raw_dia_conexion || r.dia_conexion) || maxDiaOjt;
+            const dayBaja = byDia.get(dBaja);
+            if (dayBaja) dayBaja.baja = 1;
           }
         } else {
-          if (this.isIop(r.sigla, r.estado)) {
-            esIop = 1;
-            pasoAOperacion = true;
-          }
-          if (this.isBaja(r.estado, r.motivo_baja)) {
-            esBaja = 1;
-            motivoBaja = r.motivo_baja || 'Baja';
-          }
+          // Capacitación o post-I-OP sin DIA_CONEXION: no es día OJT.
         }
       }
 
+      const pctDia = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : null);
+      const trayectoria = Array.from(byDia.values())
+        .sort((a, b) => a.dia - b.dia)
+        .map((d) => ({
+          dia: d.dia,
+          fecha: d.fecha || null,
+          llamadas: d.q,
+          transferencia_pct: pctDia(d.k1n, d.k1d),
+          tnps_pct: pctDia(d.k2n, d.k2d),
+          calidad_pct: pctDia(d.k3n, d.k3d),
+          es_iop: d.iop,
+          es_baja: d.baja
+        }));
       const promLlamadas = diasConexionCount > 0 ? Math.round(qTotalOjt / diasConexionCount) : 0;
-      const calidadPct = kpi3DenomSum > 0 ? Math.round((kpi3NumSum / kpi3DenomSum) * 100) : 85;
-      const tnpsPct = kpi2DenomSum > 0 ? Math.round((kpi2NumSum / kpi2DenomSum) * 100) : 75;
-      const transfPct = kpi1DenomSum > 0 ? Math.round((kpi1NumSum / kpi1DenomSum) * 100) : 10;
+      const calidadPct = kpi3DenomSum > 0 ? Math.round((kpi3NumSum / kpi3DenomSum) * 1000) / 10 : null;
+      const tnpsPct = kpi2DenomSum > 0 ? Math.round((kpi2NumSum / kpi2DenomSum) * 1000) / 10 : null;
+      const transfPct = kpi1DenomSum > 0 ? Math.round((kpi1NumSum / kpi1DenomSum) * 1000) / 10 : null;
 
       const finalDiaOjt = diaGraduacionOp !== null ? diaGraduacionOp : (diasConexionCount > 0 ? maxDiaOjt : 1);
 
@@ -738,14 +1020,21 @@ class OjtMetricsService {
 
       asesores.push({
         documento: sample.dni,
+        cohort_key: this.cohortKey(sample),
         nombre: sample.asesor,
         asesor: sample.asesor,
         campana: sample.campana,
         formador: sample.formador,
         grupo: sample.grupo,
         modalidad: sample.modalidad,
+        jornada: jornadaAsesor,
+        fte: this.getFteValue(jornadaAsesor, sample.modalidad),
+        semana: sample.semana,
+        periodo: sample.periodo,
+        segmento: sample.segmento,
         dia_actual: finalDiaOjt,
         dia_logico_ojt: finalDiaOjt,
+        asistio_d1: userRows.some((r) => parseInt(r.raw_dia_conexion, 10) === 1 && !!r.fecha_asistencia) ? 1 : 0,
         llamadas_q: qTotalOjt,
         llamadas_acumuladas: qTotalOjt,
         promedio_llamadas: promLlamadas,
@@ -753,6 +1042,12 @@ class OjtMetricsService {
         calidad_pct: calidadPct,
         tnps_pct: tnpsPct,
         transferencia_pct: transfPct,
+        kpi1_num: kpi1NumSum,
+        kpi1_denom: kpi1DenomSum,
+        kpi2_num: kpi2NumSum,
+        kpi2_denom: kpi2DenomSum,
+        kpi3_num: kpi3NumSum,
+        kpi3_denom: kpi3DenomSum,
         cuadrante,
         resultado_evaluacion: resultadoEvaluacion,
         accion_recomendada: accionRecomendada,
@@ -762,7 +1057,8 @@ class OjtMetricsService {
         requiere_regularizacion: requiereRegularizacion,
         es_desconexion_sin_registro: requiereRegularizacion,
         motivo_baja: motivoBaja,
-        dias_conexion_ojt: finalDiaOjt,
+        trayectoria,
+        dias_conexion_ojt: trayectoria.length,
         dias_ojt_reales: finalDiaOjt,
         dias_totales_registrados: userRows.length,
         dia_ingreso_operacion: esIop === 1 ? `Día ${finalDiaOjt}` : 'PENDIENTE / EN OJT',
@@ -772,6 +1068,34 @@ class OjtMetricsService {
         fecha_ingreso_op: fechaIngresoOp || (esIop === 1 ? `Día ${finalDiaOjt} de Conexión` : 'En proceso OJT')
       });
     }
+
+    const kpiAgregado = {
+      kpi1_num: 0, kpi1_denom: 0,
+      kpi2_num: 0, kpi2_denom: 0,
+      kpi3_num: 0, kpi3_denom: 0
+    };
+    for (const a of asesores) {
+      if ((a.kpi1_denom || 0) > 0) {
+        kpiAgregado.kpi1_num += a.kpi1_num || 0;
+        kpiAgregado.kpi1_denom += a.kpi1_denom || 0;
+      }
+      if ((a.kpi2_denom || 0) > 0) {
+        kpiAgregado.kpi2_num += a.kpi2_num || 0;
+        kpiAgregado.kpi2_denom += a.kpi2_denom || 0;
+      }
+      if ((a.kpi3_denom || 0) > 0) {
+        kpiAgregado.kpi3_num += a.kpi3_num || 0;
+        kpiAgregado.kpi3_denom += a.kpi3_denom || 0;
+      }
+    }
+
+    const ofic = this.kpiOficiales();
+    const transfGlobal = this.pctFromSum(kpiAgregado.kpi1_num, kpiAgregado.kpi1_denom);
+    const tnpsGlobal = this.pctFromSum(kpiAgregado.kpi2_num, kpiAgregado.kpi2_denom);
+    const calidadGlobal = this.pctFromSum(kpiAgregado.kpi3_num, kpiAgregado.kpi3_denom);
+    const scoreGlobal = [transfGlobal, tnpsGlobal, calidadGlobal].every(v => v !== null)
+      ? Math.round(((transfGlobal * ofic.transferencia.peso) + (tnpsGlobal * ofic.tnps.peso) + (calidadGlobal * ofic.calidad.peso)) * 10) / 10
+      : null;
 
     const resumen = {
       total_unicos: asesores.length,
@@ -786,6 +1110,17 @@ class OjtMetricsService {
       filtros_aplicados: filters,
       total_asesores_unicos: asesores.length,
       resumen,
+      metricas_kpi: {
+        transferencia_pct: transfGlobal,
+        tnps_pct: tnpsGlobal,
+        calidad_pct: calidadGlobal,
+        score_ponderado: scoreGlobal,
+        denominadores: {
+          kpi1: kpiAgregado.kpi1_denom,
+          kpi2: kpiAgregado.kpi2_denom,
+          kpi3: kpiAgregado.kpi3_denom
+        }
+      },
       asesores
     };
   }
@@ -793,6 +1128,27 @@ class OjtMetricsService {
   /**
    * 5. RANKING DE FORMADORES EN MEMORIA (< 3ms)
    */
+
+  /**
+   * Determina el valor FTE de una fila de asesor.
+   * Full-time = 1.0, Part-time = 0.5
+   * Detecta mediante campo jornada; fallback a modalidad si no existe.
+   */
+  getFteValue(jornada, modalidad) {
+    const j = (jornada || '').toUpperCase();
+    const m = (modalidad || '').toUpperCase();
+    // Detectar part-time por jornada
+    if (j.includes('PART') || j.includes('PARCIAL') || j.includes('MEDIO') || j.includes('PT') || j === 'P') return 0.5;
+    // Si la jornada dice full time
+    if (j.includes('FULL') || j.includes('COMPLETO') || j.includes('FT') || j === 'F') return 1.0;
+    // Si hay jornada pero no encaja, asumir full
+    if (j && j.length > 0) return 1.0;
+    // Sin jornada: inferir de modalidad (heurística)
+    if (m.includes('PART') || m.includes('PARCIAL')) return 0.5;
+    // Por defecto: full time
+    return 1.0;
+  }
+
   async getRankingFormadores(filters = {}) {
     const allData = await this.ensureCache();
     const filteredRows = this.filterCache(allData, filters);
@@ -804,21 +1160,26 @@ class OjtMetricsService {
       const r = filteredRows[i];
       if (!r.formador || r.formador === 'SIN FORMADOR') continue;
 
-      if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, { formador: r.formador, max_dia: 1, es_iop: 0, es_baja: 0 });
+      if (!asesorMap.has(this.cohortKey(r))) {
+        // Calcular FTE una sola vez por asesor único (primer registro visto)
+        const fte = this.getFteValue(r.jornada, r.modalidad);
+        asesorMap.set(this.cohortKey(r), { formador: r.formador, max_dia: 0, es_iop: 0, es_baja: 0, fte, jornada: r.jornada, modalidad: r.modalidad });
       }
-      const a = asesorMap.get(r.dni);
-      if (r.dia_conexion > a.max_dia) a.max_dia = r.dia_conexion;
-      if (this.isIop(r.sigla, r.estado)) a.es_iop = 1;
-      if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
+      const a = asesorMap.get(this.cohortKey(r));
+      if (r.es_ojt_row && r.raw_dia_conexion > a.max_dia) a.max_dia = r.raw_dia_conexion;
+      if (r.es_ojt_row && this.isIop(r.sigla)) a.es_iop = 1;
+      if (r.es_ojt_row && this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
     }
 
-    for (const [dni, a] of asesorMap.entries()) {
+    for (const [, a] of asesorMap.entries()) {
+      if (a.max_dia < 1) continue;
       if (!formadorMap.has(a.formador)) {
-        formadorMap.set(a.formador, { total: 0, dia5: 0, egresados: 0, bajas: 0 });
+        formadorMap.set(a.formador, { total: 0, ftes: 0, dia5: 0, egresados: 0, bajas: 0, full_time: 0, part_time: 0 });
       }
       const f = formadorMap.get(a.formador);
       f.total++;
+      f.ftes += a.fte;
+      if (a.fte === 1.0) f.full_time++; else f.part_time++;
       if (a.max_dia >= 5) f.dia5++;
       if (a.es_iop === 1) f.egresados++;
       if (a.es_baja === 1) f.bajas++;
@@ -830,6 +1191,9 @@ class OjtMetricsService {
       ranking.push({
         formador: nombre,
         total_ingresaron: f.total,
+        total_ftes: Math.round(f.ftes * 10) / 10,  // redondeo a 1 decimal
+        full_time: f.full_time,
+        part_time: f.part_time,
         llegaron_dia5: f.dia5,
         total_egresados: f.egresados,
         total_bajas: f.bajas,
@@ -837,7 +1201,7 @@ class OjtMetricsService {
       });
     }
 
-    ranking.sort((a, b) => b.retencion_dia5_pct - a.retencion_dia5_pct);
+    ranking.sort((a, b) => b.total_ingresaron - a.total_ingresaron);
 
     // Calcular totales globales para el Embudo Macro de Conversión
     let totalUnicos = 0;
@@ -847,22 +1211,41 @@ class OjtMetricsService {
     const allFiltered = this.filterCache(allData, filters);
     for (const r of allFiltered) {
       if (!r.dni) continue;
-      if (!globalAsesorMap.has(r.dni)) {
-        globalAsesorMap.set(r.dni, { max_dia: 0, es_iop: 0 });
+      if (!globalAsesorMap.has(this.cohortKey(r))) {
+        const fte = this.getFteValue(r.jornada, r.modalidad);
+        globalAsesorMap.set(this.cohortKey(r), { max_dia: 0, es_iop: 0, fte });
       }
-      const ga = globalAsesorMap.get(r.dni);
+      const ga = globalAsesorMap.get(this.cohortKey(r));
       if (r.dia_conexion > ga.max_dia) ga.max_dia = r.dia_conexion;
       if (this.isIop(r.sigla, r.estado)) ga.es_iop = 1;
     }
-    totalUnicos = globalAsesorMap.size;
+    totalUnicos = 0;
     for (const [, ga] of globalAsesorMap.entries()) {
+      if (ga.max_dia < 1) continue;
+      totalUnicos++;
       if (ga.max_dia >= 1) totalDia1++;
       if (ga.es_iop === 1) totalIop++;
+    }
+
+    // Calcular FTEs globales
+    let totalFtes = 0;
+    let totalFullTime = 0;
+    let totalPartTime = 0;
+    for (const [, ga] of globalAsesorMap.entries()) {
+      if (ga.max_dia < 1) continue;
+      totalFtes += ga.fte || 1.0;
+      if ((ga.fte || 1.0) === 1.0) totalFullTime++; else totalPartTime++;
     }
 
     return {
       success: true,
       formadores: ranking,
+      totales: {
+        personas: totalUnicos,
+        ftes: Math.round(totalFtes * 10) / 10,
+        full_time: totalFullTime,
+        part_time: totalPartTime
+      },
       embudo: {
         total_asesores_unicos: totalUnicos,
         dias_principales_1_8: [{ dia: 1, activos: totalDia1 }],
@@ -889,29 +1272,60 @@ class OjtMetricsService {
       const r = filteredRows[i];
       if (!r.modalidad) continue;
 
-      if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, { modalidad: r.modalidad, max_dia: 1, es_iop: 0, es_baja: 0 });
+      if (!asesorMap.has(this.cohortKey(r))) {
+        asesorMap.set(this.cohortKey(r), {
+          modalidad: r.modalidad,
+          max_dia: 1,
+          es_iop: 0,
+          es_baja: 0,
+          llamadas_total: 0,
+          dias_con_llamadas: new Set(),
+          kpi3_num: 0,
+          kpi3_denom: 0
+        });
       }
-      const a = asesorMap.get(r.dni);
-      if (r.dia_conexion > a.max_dia) a.max_dia = r.dia_conexion;
-      if (this.isIop(r.sigla, r.estado)) a.es_iop = 1;
+      const a = asesorMap.get(this.cohortKey(r));
+      const dia = parseInt(r.raw_dia_conexion || r.dia_conexion) || 1;
+      if (dia > a.max_dia) a.max_dia = dia;
+      if (this.isIop(r.sigla)) a.es_iop = 1;
       if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
+      a.llamadas_total += parseFloat(r.q_atendidas) || 0;
+      if ((parseFloat(r.q_atendidas) || 0) > 0) a.dias_con_llamadas.add(dia);
+      if ((parseFloat(r.kpi3_denom) || 0) > 0) {
+        a.kpi3_num += parseFloat(r.kpi3_num) || 0;
+        a.kpi3_denom += parseFloat(r.kpi3_denom) || 0;
+      }
     }
 
     for (const [dni, a] of asesorMap.entries()) {
       if (!modMap.has(a.modalidad)) {
-        modMap.set(a.modalidad, { total: 0, dia5: 0, egresados: 0, bajas: 0 });
+        modMap.set(a.modalidad, {
+          total: 0,
+          dia5: 0,
+          egresados: 0,
+          bajas: 0,
+          llamadas_total: 0,
+          dias_llamadas_total: 0,
+          kpi3_num: 0,
+          kpi3_denom: 0
+        });
       }
       const m = modMap.get(a.modalidad);
       m.total++;
       if (a.max_dia >= 5) m.dia5++;
       if (a.es_iop === 1) m.egresados++;
       if (a.es_baja === 1) m.bajas++;
+      m.llamadas_total += a.llamadas_total;
+      m.dias_llamadas_total += a.dias_con_llamadas.size;
+      m.kpi3_num += a.kpi3_num;
+      m.kpi3_denom += a.kpi3_denom;
     }
 
     const modalidades = [];
     for (const [nombre, m] of modMap.entries()) {
       const retencion = m.total > 0 ? Math.round((m.dia5 / m.total) * 100) : 0;
+      const promedioCalidad = m.kpi3_denom > 0 ? Math.round((m.kpi3_num / m.kpi3_denom) * 1000) / 10 : null;
+      const promedioLlamadas = m.dias_llamadas_total > 0 ? Math.round((m.llamadas_total / m.dias_llamadas_total) * 10) / 10 : null;
       modalidades.push({
         modalidad: nombre,
         total_ingresaron: m.total,
@@ -919,8 +1333,10 @@ class OjtMetricsService {
         total_bajas: m.bajas,
         total_operativos: m.egresados,
         retencion_dia5_pct: retencion,
-        promedio_calidad: 85.5,
-        promedio_llamadas: 22.0
+        promedio_calidad: promedioCalidad,
+        promedio_llamadas: promedioLlamadas,
+        muestra_calidad: m.kpi3_denom,
+        muestra_llamadas: m.dias_llamadas_total
       });
     }
 
@@ -932,17 +1348,17 @@ class OjtMetricsService {
    */
   async getCostoIncumplimientoGerencia(filters = {}) {
     const roi = await this.getRoiExtensiones(filters);
-    const excesos = roi.metricas?.total_exceso_politica_8d || 0;
-    const costoEstimado = excesos * 180;
+    const impacto = roi.metricas?.impacto_extension_fallida_pen || 0;
 
     return {
       success: true,
-      excesos_dias_8_plus: excesos,
-      costo_diario_estimado_pen: 180,
-      impacto_financiero_pen: costoEstimado,
-      mensaje: excesos > 0 
-        ? `⚠️ Se registra un impacto estimado de S/. ${costoEstimado.toLocaleString()} por sobre-permanencia.`
-        : '0 desvíos financieros detectados.'
+      excesos_dias_8_plus: roi.metricas?.total_exceso_politica_8d || 0,
+      costo_diario_estimado_pen: roi.metricas?.tarifa_diaria_ojt_pen || 25,
+      impacto_financiero_pen: impacto,
+      impacto_ciclo_perdido_pen: roi.metricas?.impacto_ciclo_perdido_pen || impacto,
+      mensaje: impacto > 0
+        ? `Costo hundido de extensiones fallidas: S/ ${impacto.toLocaleString('es-PE')}.`
+        : '0 costo hundido de extensión en el filtro actual.'
     };
   }
 
@@ -953,13 +1369,15 @@ class OjtMetricsService {
     const allData = await this.ensureCache();
     const filteredRows = this.filterCache(allData, filters);
 
+    const ofic = this.kpiOficiales();
+
     if (filteredRows.length === 0) {
       return {
         success: true,
         indicadores: [
-          { indicador: 'Calidad Emitida', meta_ojt: 73, obj_cump: 65, peso_pct: 40, promedio_actual: 0, semaforo: 'ROJO' },
-          { indicador: 'tNPS', meta_ojt: 73, obj_cump: 65, peso_pct: 40, promedio_actual: 0, semaforo: 'ROJO' },
-          { indicador: 'Transferencia', meta_ojt: 75, obj_cump: 65, peso_pct: 20, promedio_actual: 0, semaforo: 'ROJO' }
+          { indicador: 'Calidad Emitida', meta_ojt: ofic.calidad.meta, obj_cump: ofic.calidad.objCump, peso_pct: 40, promedio_actual: null, semaforo: 'ROJO' },
+          { indicador: 'tNPS', meta_ojt: ofic.tnps.meta, obj_cump: ofic.tnps.objCump, peso_pct: 40, promedio_actual: null, semaforo: 'ROJO' },
+          { indicador: 'Transferencia', meta_ojt: ofic.transferencia.meta, obj_cump: ofic.transferencia.objCump, peso_pct: 20, promedio_actual: null, semaforo: 'ROJO' }
         ],
         resumen_condicion: { aprobados: 0, ampliacion: 0, desaprobados: 0, total_evaluados: 0 },
         resumen_estados: { en_curso_ojt: 0, extension: 0, cesado_ojt: 0, en_curso_teorico: 0, cesado_teoria: 0 },
@@ -967,49 +1385,35 @@ class OjtMetricsService {
       };
     }
 
-    const asesorMap = new Map();
+    const rowsByDni = new Map();
     for (let i = 0; i < filteredRows.length; i++) {
       const r = filteredRows[i];
-      if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, {
-          dni: r.dni,
-          asesor: r.asesor,
-          max_dia: 1,
-          es_iop: 0,
-          es_baja: 0,
-          estado_raw: r.estado,
-          sigla_raw: r.sigla,
-          kpi1_n: 0, kpi1_d: 0,
-          kpi2_n: 0, kpi2_d: 0,
-          kpi3_n: 0, kpi3_d: 0
-        });
-      }
-      const a = asesorMap.get(r.dni);
-      if (r.dia_conexion > a.max_dia) a.max_dia = r.dia_conexion;
-      if (this.isIop(r.sigla, r.estado)) a.es_iop = 1;
-      if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
-      a.kpi1_n += parseFloat(r.kpi1_num) || 0; a.kpi1_d += parseFloat(r.kpi1_denom) || 0;
-      a.kpi2_n += parseFloat(r.kpi2_num) || 0; a.kpi2_d += parseFloat(r.kpi2_denom) || 0;
-      a.kpi3_n += parseFloat(r.kpi3_num) || 0; a.kpi3_d += parseFloat(r.kpi3_denom) || 0;
+      if (!rowsByDni.has(this.cohortKey(r))) rowsByDni.set(this.cohortKey(r), []);
+      rowsByDni.get(this.cohortKey(r)).push(r);
     }
 
-    let sumCalidad = 0, sumTnps = 0, sumTransf = 0, countCal = 0, countTnps = 0, countTransf = 0;
+    let kpi1_n = 0, kpi1_d = 0, kpi2_n = 0, kpi2_d = 0, kpi3_n = 0, kpi3_d = 0;
     let aprobados = 0, ampliacion = 0, desaprobados = 0;
     let enCursoOjt = 0, egresadosIop = 0, extension = 0, cesadoOjt = 0, enCursoTeorico = 0, cesadoTeoria = 0;
 
-    for (const [dni, a] of asesorMap.entries()) {
-      const calidad = a.kpi3_d > 0 ? (a.kpi3_n / a.kpi3_d) * 100 : 75;
-      const tnps = a.kpi2_d > 0 ? (a.kpi2_n / a.kpi2_d) * 100 : 75;
-      const transf = a.kpi1_d > 0 ? (a.kpi1_n / a.kpi1_d) * 100 : 75;
+    for (const userRows of rowsByDni.values()) {
+      const a = this.summarizeAdvisorOjtKpis(userRows);
 
-      sumCalidad += calidad; countCal++;
-      sumTnps += tnps; countTnps++;
-      sumTransf += transf; countTransf++;
+      if (a.kpi1_d > 0) { kpi1_n += a.kpi1_n; kpi1_d += a.kpi1_d; }
+      if (a.kpi2_d > 0) { kpi2_n += a.kpi2_n; kpi2_d += a.kpi2_d; }
+      if (a.kpi3_d > 0) { kpi3_n += a.kpi3_n; kpi3_d += a.kpi3_d; }
 
-      const notaPonderada = (calidad * 0.40) + (tnps * 0.40) + (transf * 0.20);
-      if (notaPonderada >= 75) aprobados++;
-      else if (notaPonderada >= 65) ampliacion++;
-      else desaprobados++;
+      const parts = [];
+      if (a.kpi3_d > 0) parts.push({ v: (a.kpi3_n / a.kpi3_d) * 100, w: ofic.calidad.peso });
+      if (a.kpi2_d > 0) parts.push({ v: (a.kpi2_n / a.kpi2_d) * 100, w: ofic.tnps.peso });
+      if (a.kpi1_d > 0) parts.push({ v: (a.kpi1_n / a.kpi1_d) * 100, w: ofic.transferencia.peso });
+      if (parts.length > 0) {
+        const wSum = parts.reduce((s, p) => s + p.w, 0);
+        const notaPonderada = parts.reduce((s, p) => s + p.v * (p.w / wSum), 0);
+        if (notaPonderada >= 75) aprobados++;
+        else if (notaPonderada >= 65) ampliacion++;
+        else desaprobados++;
+      }
 
       if (a.es_baja === 1 && a.es_iop === 0) {
         if (a.max_dia <= 1) cesadoTeoria++;
@@ -1023,25 +1427,22 @@ class OjtMetricsService {
       }
     }
 
-    const totalEvaluados = asesorMap.size;
-    const promCalidad = countCal > 0 ? Math.round((sumCalidad / countCal) * 10) / 10 : 75;
-    const promTnps = countTnps > 0 ? Math.round((sumTnps / countTnps) * 10) / 10 : 75;
-    const promTransf = countTransf > 0 ? Math.round((sumTransf / countTransf) * 10) / 10 : 75;
+    const totalEvaluados = rowsByDni.size;
+    const promCalidad = this.pctFromSum(kpi3_n, kpi3_d);
+    const promTnps = this.pctFromSum(kpi2_n, kpi2_d);
+    const promTransf = this.pctFromSum(kpi1_n, kpi1_d);
 
     const totalBajas = cesadoOjt + cesadoTeoria;
     const pctDesercion = totalEvaluados > 0 ? Math.round((totalBajas / totalEvaluados) * 1000) / 10 : 0;
     const retencionPct = Math.round((100 - pctDesercion) * 10) / 10;
-
-    let semaforoDesercion = 'VERDE';
-    if (pctDesercion > 55) semaforoDesercion = 'ROJO';
-    else if (pctDesercion > 30) semaforoDesercion = 'AMARILLO';
+    const semaforoDesercion = pctDesercion > ofic.desercion.meta ? 'ROJO' : 'VERDE';
 
     return {
       success: true,
       indicadores: [
-        { indicador: 'Calidad Emitida (KPI 3)', meta_ojt: 73, obj_cump: 65, peso_pct: 40, promedio_actual: promCalidad, semaforo: promCalidad >= 73 ? 'VERDE' : promCalidad >= 65 ? 'AMARILLO' : 'ROJO' },
-        { indicador: 'tNPS (KPI 2)', meta_ojt: 73, obj_cump: 65, peso_pct: 40, promedio_actual: promTnps, semaforo: promTnps >= 73 ? 'VERDE' : promTnps >= 65 ? 'AMARILLO' : 'ROJO' },
-        { indicador: 'Transferencia (KPI 1)', meta_ojt: 75, obj_cump: 65, peso_pct: 20, promedio_actual: promTransf, semaforo: promTransf >= 75 ? 'VERDE' : promTransf >= 65 ? 'AMARILLO' : 'ROJO' }
+        { indicador: 'Calidad Emitida (KPI 3)', meta_ojt: ofic.calidad.meta, obj_cump: ofic.calidad.objCump, peso_pct: 40, promedio_actual: promCalidad, semaforo: this.semaforoMayorMejor(promCalidad, ofic.calidad.meta, ofic.calidad.objCump) },
+        { indicador: 'tNPS (KPI 2)', meta_ojt: ofic.tnps.meta, obj_cump: ofic.tnps.objCump, peso_pct: 40, promedio_actual: promTnps, semaforo: this.semaforoMayorMejor(promTnps, ofic.tnps.meta, ofic.tnps.objCump) },
+        { indicador: 'Transferencia (KPI 1)', meta_ojt: ofic.transferencia.meta, obj_cump: ofic.transferencia.objCump, peso_pct: 20, promedio_actual: promTransf, semaforo: this.semaforoMayorMejor(promTransf, ofic.transferencia.meta, ofic.transferencia.objCump) }
       ],
       resumen_condicion: {
         aprobados,
@@ -1080,10 +1481,10 @@ class OjtMetricsService {
     const asesorMap = new Map();
     for (let i = 0; i < filteredRows.length; i++) {
       const r = filteredRows[i];
-      if (!asesorMap.has(r.dni)) {
-        asesorMap.set(r.dni, { es_iop: 0, es_baja: 0 });
+      if (!asesorMap.has(this.cohortKey(r))) {
+        asesorMap.set(this.cohortKey(r), { es_iop: 0, es_baja: 0 });
       }
-      const a = asesorMap.get(r.dni);
+      const a = asesorMap.get(this.cohortKey(r));
       if (this.isIop(r.sigla, r.estado)) a.es_iop = 1;
       if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
     }
@@ -1133,7 +1534,7 @@ class OjtMetricsService {
       const nombre = String(r.asesor || '').trim();
       if (!dni && !nombre) continue;
 
-      const key = dni || nombre;
+      const key = this.cohortKey(r) || nombre;
       const esBajaRow = this.isBaja(r.estado, r.motivo_baja, r.sigla);
 
       let m = (r.motivo_baja || '').trim();
@@ -1199,7 +1600,7 @@ class OjtMetricsService {
       const nombre = String(r.asesor || '').trim();
       if (!dni && !nombre) continue;
 
-      const key = dni || nombre;
+      const key = this.cohortKey(r) || nombre;
       if (!asesorMap.has(key)) {
         asesorMap.set(key, {
           dni: dni || 'S/D',
@@ -1249,7 +1650,7 @@ class OjtMetricsService {
       const nombre = String(r.asesor || '').trim();
       if (!dni && !nombre) continue;
 
-      const key = dni || nombre;
+      const key = this.cohortKey(r) || nombre;
       if (!asesorMap.has(key)) {
         asesorMap.set(key, {
           documento: dni || 'S/D',
@@ -1332,30 +1733,86 @@ class OjtMetricsService {
     const filteredRows = this.filterCache(allData, filters);
 
     if (!filteredRows || filteredRows.length === 0) {
-      return { success: true, curva: [] };
+      return { success: true, curva: [], total_general_llamadas: 0, promedio_general: null, max_dia: 0 };
+    }
+
+    // La fuente corregida ya entrega DIA_CONEXION cortado en I-OP y Q_ATENDIDAS_DIA como delta diario.
+    let maxDia = 0;
+    for (const r of filteredRows) {
+      if (!r.es_ojt_row) continue;
+      const d = parseInt(r.raw_dia_conexion, 10);
+      if (!Number.isFinite(d) || d < 1) continue;
+      if (d > maxDia && d <= 12) maxDia = d;
+    }
+    maxDia = Math.min(maxDia, 10);
+
+    if (maxDia <= 0) {
+      return { success: true, curva: [], total_general_llamadas: 0, promedio_general: null, max_dia: 0 };
     }
 
     const diasMap = {};
-    for (let d = 1; d <= 8; d++) {
-      diasMap[d] = { total_llamadas: 0, conteo: 0 };
+    for (let d = 1; d <= maxDia; d++) {
+      diasMap[d] = { total_llamadas: 0, asesores: new Set() };
     }
 
+    const filasUnicasPorAsesorDia = new Map();
     for (const r of filteredRows) {
-      const d = parseInt(r.dia_conexion) || 1;
-      if (d >= 1 && d <= 8) {
-        diasMap[d].total_llamadas += parseFloat(r.q_atendidas) || 0;
-        diasMap[d].conteo += 1;
+      if (!r.es_ojt_row) continue;
+      const d = parseInt(r.raw_dia_conexion, 10);
+      const dni = String(r.dni || r.asesor || '').trim();
+      if (!dni || !Number.isFinite(d) || d < 1) continue;
+      if (d >= 1 && d <= maxDia) {
+        const key = `${this.cohortKey(r)}|${d}`;
+        const current = filasUnicasPorAsesorDia.get(key);
+        if (!current || (r.fecha_asistencia || '') >= (current.fecha_asistencia || '')) {
+          filasUnicasPorAsesorDia.set(key, r);
+        }
       }
     }
 
-    const curva = [];
-    for (let d = 1; d <= 8; d++) {
-      const item = diasMap[d];
-      const prom = item.conteo > 0 ? Math.round((item.total_llamadas / item.conteo) * 10) / 10 : Math.round(d * 4.5);
-      curva.push({ dia: `Día ${d}`, promedio_llamadas: prom });
+    for (const r of filasUnicasPorAsesorDia.values()) {
+      const d = parseInt(r.raw_dia_conexion || r.dia_conexion) || 1;
+      const dni = String(r.dni || r.asesor || '').trim();
+      const llamadasDia = parseFloat(r.q_atendidas) || 0;
+      diasMap[d].total_llamadas += llamadasDia;
+      diasMap[d].asesores.add(dni);
     }
 
-    return { success: true, curva };
+    let sumTotalLlamadas = 0;
+    let sumAsesoresDia = 0;
+    const curva = [];
+
+    for (let d = 1; d <= maxDia; d++) {
+      const item = diasMap[d];
+      const asesoresActivos = item.asesores.size;
+      if (asesoresActivos === 0) continue;
+
+      const prom = Math.round((item.total_llamadas / asesoresActivos) * 10) / 10;
+      const totalLlam = Math.round(item.total_llamadas);
+      sumTotalLlamadas += totalLlam;
+      sumAsesoresDia += asesoresActivos;
+
+      curva.push({
+        dia: `D${d}`,
+        dia_label: `Día ${d}`,
+        dia_num: d,
+        promedio_llamadas: prom,
+        total_llamadas: totalLlam,
+        asesores_activos: asesoresActivos
+      });
+    }
+
+    const promedioGeneral = sumAsesoresDia > 0 ? Math.round((sumTotalLlamadas / sumAsesoresDia) * 10) / 10 : null;
+
+    return {
+      success: true,
+      curva,
+      total_general_llamadas: sumTotalLlamadas,
+      promedio_general: promedioGeneral,
+      max_dia: maxDia,
+      grupo_filtrado: filters.grupo || 'Todos los grupos',
+      periodo_filtrado: filters.periodo || 'Todos los periodos'
+    };
   }
 
   /**
@@ -1473,6 +1930,274 @@ class OjtMetricsService {
     });
 
     return { success: true, semanas };
+  }
+
+  /**
+   * PROYECCIÓN DE RESULTADO (FORECAST) - Basado en Flash OJT
+   * 3 escenarios: D1, D1-D2, D3-D5 calculados con conversión histórica real
+   */
+  async getProyeccionCohorte(filters = {}) {
+    const allData = await this.ensureCache();
+
+    // 1. Tasas de graduación históricas globales
+    const globalAsesorMap = new Map();
+    for (let i = 0; i < allData.length; i++) {
+      const r = allData[i];
+      if (!globalAsesorMap.has(this.cohortKey(r))) {
+        globalAsesorMap.set(this.cohortKey(r), { max_dia: 0, es_iop: 0, es_baja: 0 });
+      }
+      const a = globalAsesorMap.get(this.cohortKey(r));
+      const dia = r.raw_dia_conexion || (r.es_ojt_row ? 1 : 0);
+      if (dia > a.max_dia) a.max_dia = dia;
+      if (this.isIop(r.sigla, r.estado)) a.es_iop = 1;
+      if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
+    }
+
+    let histD1 = 0, histD1Grad = 0;
+    let histD2 = 0, histD2Grad = 0;
+    let histD3 = 0, histD3Grad = 0;
+    let histTotalGrad = 0;
+    let histTotal = 0;
+
+    for (const a of globalAsesorMap.values()) {
+      histTotal++;
+      if (a.es_iop === 1) histTotalGrad++;
+      if (a.max_dia >= 1) {
+        histD1++;
+        if (a.es_iop === 1) histD1Grad++;
+      }
+      if (a.max_dia >= 2) {
+        histD2++;
+        if (a.es_iop === 1) histD2Grad++;
+      }
+      if (a.max_dia >= 3) {
+        histD3++;
+        if (a.es_iop === 1) histD3Grad++;
+      }
+    }
+
+    const tasaHistD1toGrad = histD1 > 0 ? (histD1Grad / histD1) : 0.62;
+    const tasaHistD2toGrad = histD2 > 0 ? (histD2Grad / histD2) : 0.74;
+    const tasaHistD3toGrad = histD3 > 0 ? (histD3Grad / histD3) : 0.86;
+
+    // 2. Filtrado para la cohorte / grupo seleccionado
+    const filteredRows = this.filterCache(allData, filters);
+    const cohorteAsesorMap = new Map();
+    for (let i = 0; i < filteredRows.length; i++) {
+      const r = filteredRows[i];
+      if (!cohorteAsesorMap.has(this.cohortKey(r))) {
+        cohorteAsesorMap.set(this.cohortKey(r), {
+          dni: r.dni,
+          asesor: r.asesor,
+          max_dia: 0,
+          es_iop: 0,
+          es_baja: 0,
+          estado: r.estado,
+          sigla: r.sigla,
+          grupo: r.grupo
+        });
+      }
+      const a = cohorteAsesorMap.get(this.cohortKey(r));
+      const dia = r.raw_dia_conexion || (r.es_ojt_row ? 1 : 0);
+      if (dia > a.max_dia) a.max_dia = dia;
+      if (this.isIop(r.sigla, r.estado)) a.es_iop = 1;
+      if (this.isBaja(r.estado, r.motivo_baja)) a.es_baja = 1;
+    }
+
+    const totalCohorte = cohorteAsesorMap.size;
+    let confirmadosAprobados = 0;
+    let confirmadosDesaprobados = 0;
+    let enCurso = 0;
+    let activosD1 = 0;
+    let activosD2 = 0;
+    let activosD3Plus = 0;
+
+    for (const a of cohorteAsesorMap.values()) {
+      if (a.es_iop === 1 || a.sigla === 'A' || (a.estado && a.estado.includes('APROB'))) {
+        confirmadosAprobados++;
+      } else if (a.es_baja === 1 || a.sigla === 'D' || (a.estado && a.estado.includes('DESAPROB'))) {
+        confirmadosDesaprobados++;
+      } else {
+        enCurso++;
+        if (a.max_dia <= 1) activosD1++;
+        else if (a.max_dia === 2) activosD2++;
+        else activosD3Plus++;
+      }
+    }
+
+    // Escenario 1: Proyección Temprana (Base D1)
+    const esc1Proy = Math.round(enCurso * tasaHistD1toGrad);
+    const esc1TotalAprob = Math.min(totalCohorte, confirmadosAprobados + esc1Proy);
+    const esc1TotalBajas = Math.max(0, totalCohorte - esc1TotalAprob);
+    const esc1Tasa = totalCohorte > 0 ? Math.round((esc1TotalAprob / totalCohorte) * 100) : 0;
+
+    // Escenario 2: Proyección Intermedia (Base D1-D2)
+    const esc2Proy = Math.round((activosD1 * tasaHistD1toGrad) + ((activosD2 + activosD3Plus) * tasaHistD2toGrad));
+    const esc2TotalAprob = Math.min(totalCohorte, confirmadosAprobados + esc2Proy);
+    const esc2TotalBajas = Math.max(0, totalCohorte - esc2TotalAprob);
+    const esc2Tasa = totalCohorte > 0 ? Math.round((esc2TotalAprob / totalCohorte) * 100) : 0;
+
+    // Escenario 3: Proyección Avanzada (Base D3-D5)
+    const esc3Proy = Math.round((activosD1 * tasaHistD1toGrad) + (activosD2 * tasaHistD2toGrad) + (activosD3Plus * tasaHistD3toGrad));
+    const esc3TotalAprob = Math.min(totalCohorte, confirmadosAprobados + esc3Proy);
+    const esc3TotalBajas = Math.max(0, totalCohorte - esc3TotalAprob);
+    const esc3Tasa = totalCohorte > 0 ? Math.round((esc3TotalAprob / totalCohorte) * 100) : 0;
+
+    return {
+      success: true,
+      cohorte: filters.grupo || 'Todas las cohortes',
+      total_asesores: totalCohorte,
+      confirmados: {
+        aprobados: confirmadosAprobados,
+        desaprobados: confirmadosDesaprobados,
+        pendientes_en_curso: enCurso
+      },
+      distribucion_activos: {
+        en_d1: activosD1,
+        en_d2: activosD2,
+        en_d3_mas: activosD3Plus
+      },
+      tasas_historicas: {
+        d1_a_graduacion: Math.round(tasaHistD1toGrad * 100),
+        d2_a_graduacion: Math.round(tasaHistD2toGrad * 100),
+        d3_a_graduacion: Math.round(tasaHistD3toGrad * 100)
+      },
+      escenarios: [
+        {
+          id: 'D1',
+          nombre: 'Escenario D1 (Filtro Temprano)',
+          descripcion: 'Estimación inicial al arrancar OJT',
+          proyeccion_aprobados: esc1TotalAprob,
+          proyeccion_desaprobados: esc1TotalBajas,
+          tasa_proyectada: esc1Tasa,
+          confianza: 'BÁSICA (60-70%)',
+          color: '#00d2ff'
+        },
+        {
+          id: 'D1_D2',
+          nombre: 'Escenario D1-D2 (Filtro Intermedio)',
+          descripcion: 'Tras 48h con primeros cortes de inasistencia',
+          proyeccion_aprobados: esc2TotalAprob,
+          proyeccion_desaprobados: esc2TotalBajas,
+          tasa_proyectada: esc2Tasa,
+          confianza: 'MEDIA (75-85%)',
+          color: '#a855f7'
+        },
+        {
+          id: 'D3_D5',
+          nombre: 'Escenario D3-D5 (Filtro Avanzado)',
+          descripcion: 'Fase de consolidación y cierre de cohorte',
+          proyeccion_aprobados: esc3TotalAprob,
+          proyeccion_desaprobados: esc3TotalBajas,
+          tasa_proyectada: esc3Tasa,
+          confianza: 'ALTA (>90%)',
+          color: '#00ff88'
+        }
+      ]
+    };
+  }
+
+  /**
+   * TABLA DETALLE DÍA A DÍA POR ASESOR (16 COLUMNAS EXCEL FLASH OJT)
+   */
+  async getDetalleAuditoriaAsesores(filters = {}) {
+    const allData = await this.ensureCache();
+    const filteredRows = this.filterCache(allData, filters);
+
+    // Agrupar filas por DNI
+    const asesorRowsMap = new Map();
+    for (let i = 0; i < filteredRows.length; i++) {
+      const r = filteredRows[i];
+      if (!asesorRowsMap.has(this.cohortKey(r))) {
+        asesorRowsMap.set(this.cohortKey(r), []);
+      }
+      asesorRowsMap.get(this.cohortKey(r)).push(r);
+    }
+
+    const asesores = [];
+    for (const [dni, rows] of asesorRowsMap.entries()) {
+      const first = rows[0];
+      let maxDiaOjt = 0;
+      let esIop = 0;
+      let esBaja = 0;
+      let motivoBaja = '';
+      let qTotal = 0;
+      let kpi1Num = 0, kpi1Denom = 0;
+      let kpi2Num = 0, kpi2Denom = 0;
+      let kpi3Num = 0, kpi3Denom = 0;
+      let fechaIngresoOp = first.fecha_ingreso_op || '';
+      let fechaInicioOjt = first.fecha_inicio_ojt || '';
+
+      for (let j = 0; j < rows.length; j++) {
+        const r = rows[j];
+        const dia = r.raw_dia_conexion || (r.es_ojt_row ? 1 : 0);
+        if (dia > maxDiaOjt) maxDiaOjt = dia;
+        if (this.isIop(r.sigla, r.estado)) esIop = 1;
+        if (this.isBaja(r.estado, r.motivo_baja)) {
+          esBaja = 1;
+          if (r.motivo_baja) motivoBaja = r.motivo_baja;
+        }
+        qTotal += (r.q_atendidas || 0);
+        kpi1Num += (r.kpi1_num || 0);
+        kpi1Denom += (r.kpi1_denom || 0);
+        kpi2Num += (r.kpi2_num || 0);
+        kpi2Denom += (r.kpi2_denom || 0);
+        kpi3Num += (r.kpi3_num || 0);
+        kpi3Denom += (r.kpi3_denom || 0);
+        if (!fechaIngresoOp && r.fecha_ingreso_op) fechaIngresoOp = r.fecha_ingreso_op;
+        if (!fechaInicioOjt && r.fecha_inicio_ojt) fechaInicioOjt = r.fecha_inicio_ojt;
+      }
+
+      // Determinar Estado Semántico & Badge
+      let estadoBadge = 'PENDIENTE';
+      let estadoTexto = first.estado || 'PENDIENTE';
+      if (esIop === 1 || first.sigla === 'A' || estadoTexto.includes('APROB') || estadoTexto.includes('EGRES')) {
+        estadoBadge = 'APROBADO';
+        estadoTexto = 'APROBADO / IOP';
+      } else if (esBaja === 1 || first.sigla === 'D' || estadoTexto.includes('DESAPROB') || estadoTexto.includes('BAJA') || estadoTexto.includes('CESE')) {
+        estadoBadge = 'DESAPROBADO';
+        estadoTexto = motivoBaja ? `BAJA (${motivoBaja})` : (first.estado || 'DESAPROBADO');
+      } else if (maxDiaOjt === 0) {
+        estadoBadge = 'SIN_GESTION';
+        estadoTexto = 'SIN GESTIÓN';
+      } else if (maxDiaOjt >= 6) {
+        estadoBadge = 'AMPLIACION';
+        estadoTexto = 'EN AMPLIACIÓN';
+      }
+
+      const ultimoDiaLabel = maxDiaOjt === 0 ? 'Sin gestión' : (maxDiaOjt > 5 ? `D${maxDiaOjt} (>D5)` : `D${maxDiaOjt}`);
+
+      const kpi1Pct = kpi1Denom > 0 ? Math.round((kpi1Num / kpi1Denom) * 1000) / 10 : 0;
+      const kpi2Pct = kpi2Denom > 0 ? Math.round((kpi2Num / kpi2Denom) * 1000) / 10 : 0;
+      const kpi3Val = kpi3Denom > 0 ? Math.round((kpi3Num / kpi3Denom) * 10) / 10 : (kpi3Num > 0 ? kpi3Num : 0);
+
+      asesores.push({
+        dni,
+        asesor: first.asesor || 'SIN NOMBRE',
+        formador: first.formador || 'SIN FORMADOR',
+        campana: first.campana || 'SIN CAMPAÑA',
+        grupo: first.grupo || 'SIN GRUPO',
+        modalidad: first.modalidad || 'PRESENCIAL',
+        estado: estadoTexto,
+        sigla: first.sigla || '-',
+        motivo_baja: motivoBaja || '-',
+        ultimo_dia: ultimoDiaLabel,
+        ultimo_dia_num: maxDiaOjt,
+        q_atendidas: Math.round(qTotal),
+        kpi1: kpi1Pct > 0 ? `${kpi1Pct}%` : '-',
+        kpi2: kpi2Pct > 0 ? `${kpi2Pct}%` : '-',
+        kpi3: kpi3Val > 0 ? `${kpi3Val}` : '-',
+        fecha_inicio_ojt: fechaInicioOjt || '-',
+        fecha_ingreso_op: fechaIngresoOp || '-',
+        estado_badge: estadoBadge
+      });
+    }
+
+    return {
+      success: true,
+      total_asesores: asesores.length,
+      asesores
+    };
   }
 
   getMockFiltros() { return { success: true, campanas: [], formadores: [], modalidades: [] }; }

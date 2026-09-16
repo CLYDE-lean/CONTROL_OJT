@@ -55,6 +55,38 @@ router.get('/matriz-intervencion', async (req, res) => {
 });
 
 /**
+ * GET & POST /api/ojt/proyeccion-cohorte
+ * Proyección de resultado final (3 escenarios: D1, D1-D2, D3-D5)
+ */
+const handleProyeccionCohorte = async (req, res) => {
+  try {
+    const filters = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+    const data = await ojtMetricsService.getProyeccionCohorte(filters);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Error al proyectar cohorte', message: err.message });
+  }
+};
+router.get('/proyeccion-cohorte', handleProyeccionCohorte);
+router.post('/proyeccion-cohorte', handleProyeccionCohorte);
+
+/**
+ * GET & POST /api/ojt/detalle-auditoria
+ * Tabla detalle día a día por asesor (16 columnas Excel Flash OJT)
+ */
+const handleDetalleAuditoria = async (req, res) => {
+  try {
+    const filters = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+    const data = await ojtMetricsService.getDetalleAuditoriaAsesores(filters);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Error al obtener detalle de auditoría', message: err.message });
+  }
+};
+router.get('/detalle-auditoria', handleDetalleAuditoria);
+router.post('/detalle-auditoria', handleDetalleAuditoria);
+
+/**
  * GET & POST /api/ojt/dashboard-resumen
  * Endpoint consolidado con filtrado en cascada auto-excluyente e in-memory cache.
  */
@@ -245,6 +277,17 @@ router.get('/refresh-cache', async (req, res) => {
     res.json({ success: true, message: 'Cache de métricas actualizado en memoria correctamente.' });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Error al refrescar cache', message: err.message });
+  }
+});
+
+router.get('/capacidad-rys', async (req, res) => {
+  try {
+    const capacidadRysService = require('../services/capacidadRysService');
+    const force = String(req.query.refresh || '') === '1';
+    const data = await capacidadRysService.getCapacidadRys(req.query || {}, force);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Error al consultar Capacidad RYS', message: err.message });
   }
 });
 
