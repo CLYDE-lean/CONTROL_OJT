@@ -280,7 +280,7 @@ class OjtMetricsService {
 
   async getActiveTable(client = db) {
     if (this.cachedActiveTable) return this.cachedActiveTable;
-    const candidateTables = ['vw_ojt_diario', 'VW_OJT_DIARIO', 'CONTROL', 'control', 'Control', 'base_ojt', 'base_OJT', 'BASE_OJT'];
+    const candidateTables = ['control_ojt', 'CONTROL_OJT', 'vw_ojt_diario', 'VW_OJT_DIARIO', 'CONTROL', 'control', 'Control', 'base_ojt', 'base_OJT', 'BASE_OJT'];
     for (const tbl of candidateTables) {
       try {
         const cols = await this.getColumnNames(tbl);

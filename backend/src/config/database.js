@@ -9,11 +9,11 @@ if (fs.existsSync(envPath)) {
   require('dotenv').config();
 }
 
-const connectionString = process.env.DATABASE_URL_SUPABASE;
+const connectionString = process.env.DATABASE_URL_SUPABASE || process.env.DATABASE_URL;
 
 if (!connectionString) {
   throw new Error(
-    'Falta DATABASE_URL_SUPABASE. Define la variable en backend/.env (local) o en las Environment Variables del proyecto (Vercel).'
+    'Falta DATABASE_URL_SUPABASE o DATABASE_URL. Define la variable en backend/.env (local) o en las Environment Variables del proyecto (Vercel).'
   );
 }
 
