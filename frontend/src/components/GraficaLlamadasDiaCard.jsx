@@ -1,17 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Tooltip
-} from 'chart.js';
+import { Chart as ChartJS, registerables } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import { lastCalloutPlugin, tooltipOjt, ejeXOjt, ejeYOjt, ejeYPctOjt, OJT_CHART_THEME } from '../utils/chartOjt';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip);
+ChartJS.register(...registerables);
 
 export default function GraficaLlamadasDiaCard({ filtros = {} }) {
   const [data, setData] = useState(null);

@@ -1,3 +1,8 @@
+import { Chart as ChartJS, registerables } from 'chart.js';
+
+// Registro global de controladores, escalas y elementos de Chart.js
+ChartJS.register(...registerables);
+
 // Estilo común de los gráficos mixtos (barras + línea de %) del dashboard OJT.
 
 export const OJT_CHART_THEME = {

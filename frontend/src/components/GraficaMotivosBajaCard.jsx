@@ -1,18 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { UserX, CheckCircle2, Maximize2, X } from 'lucide-react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Tooltip
-} from 'chart.js';
+import { Chart as ChartJS, registerables } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import { lastCalloutPlugin, tooltipOjt, ejeXOjt, ejeYOjt, ejeYPctOjt, OJT_CHART_THEME } from '../utils/chartOjt';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip);
+ChartJS.register(...registerables);
 
 const BAR_COLORS = OJT_CHART_THEME.pareto;
 
