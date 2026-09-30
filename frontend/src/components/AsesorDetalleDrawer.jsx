@@ -1,6 +1,12 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import { KPI_OFICIALES, semaforoMayorMejor, colorSemaforoKpi } from '../utils/kpiOficiales';
+import {
+  KPI_OFICIALES,
+  semaforoMayorMejor,
+  colorSemaforoKpi,
+  calcularNotaPonderadaOjt,
+  getCondicionOjt
+} from '../utils/kpiOficiales';
 
 function fmtFecha(v) {
   if (!v) return '—';
@@ -25,6 +31,12 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
   const esBaja      = asesor.es_baja === 1 || 
                       asesor.estado_actual?.toUpperCase().includes('BAJA') || 
                       asesor.estado_actual?.toUpperCase().includes('CESADO');
+
+  const notaPonderada = calcularNotaPonderadaOjt(asesor.calidad_pct, asesor.tnps_pct, asesor.transferencia_pct);
+  const condicion = getCondicionOjt(notaPonderada, {
+    esBaja: esBaja,
+    esIop: esOperativo
+  });
 
   return (
     <>
@@ -241,6 +253,52 @@ export default function AsesorDetalleDrawer({ asesor, onClose, onEjecutarDecisio
             Indicadores y Métricas Clave
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            {/* Box Destacado: Calificación & Condición OJT Oficial */}
+            <div style={{
+              gridColumn: 'span 2',
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+              padding: '0.85rem 1rem',
+              borderRadius: '8px',
+              border: `1px solid ${condicion.border || 'rgba(56, 189, 248, 0.3)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              color: '#ffffff'
+            }}>
+              <div>
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Score Ponderado Oficial OJT
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '2px' }}>
+                  <span style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace", color: condicion.color }}>
+                    {Number.isFinite(notaPonderada) ? `${notaPonderada}%` : '—'}
+                  </span>
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>
+                    40% Calidad + 40% tNPS + 20% Transf.
+                  </span>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{
+                  display: 'inline-block',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  color: condicion.color,
+                  background: condicion.badgeBg,
+                  border: `1px solid ${condicion.border}`,
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em'
+                }}>
+                  {condicion.label}
+                </span>
+                <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '3px' }}>
+                  {condicion.rango ? `Rango: ${condicion.rango}` : ''}
+                </div>
+              </div>
+            </div>
+
             <div style={{ background: '#f7f9fc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e8edf5' }}>
               <div style={{ fontSize: '0.68rem', color: '#7a90ad', fontWeight: 700 }}>Llamadas Totales</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f1c2e' }}>

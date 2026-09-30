@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { Copy, Check, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import { Copy, Check, RotateCcw } from 'lucide-react';
 
 export const ORDEN_FILTROS = [
-  { key: 'periodo', label: 'Periodo' },
-  { key: 'semana', label: 'Semana' },
-  { key: 'segmento', label: 'Segmento' },
-  { key: 'campana', label: 'Campaña' },
-  { key: 'grupo', label: 'Grupo' },
-  { key: 'formador', label: 'Formador' },
-  { key: 'modalidad', label: 'Modalidad' },
-  { key: 'estado', label: 'Estado' }
+  { key: 'periodo', label: 'Periodo', opciones: 'periodos' },
+  { key: 'semana', label: 'Semana', opciones: 'semanas' },
+  { key: 'segmento', label: 'Segmento', opciones: 'segmentos' },
+  { key: 'campana', label: 'Campaña', opciones: 'campanas' },
+  { key: 'grupo', label: 'Grupo', opciones: 'grupos' },
+  { key: 'formador', label: 'Formador', opciones: 'formadores' },
+  { key: 'modalidad', label: 'Modalidad', opciones: 'modalidades' },
+  { key: 'estado', label: 'Estado', opciones: 'estados' }
 ];
 
 export function textoContextoFiltros(filtros = {}, totalAsesores = 0) {
@@ -35,10 +35,10 @@ export function textoContextoFiltros(filtros = {}, totalAsesores = 0) {
 
 export default function BarraContextoFiltros({
   filtros = {},
+  opciones = {},
   totalAsesores = 0,
-  onAbrirFiltros,
-  onLimpiarFiltros,
-  onRemoverFiltro
+  onFiltroChange,
+  onLimpiarFiltros
 }) {
   const [copiado, setCopiado] = useState(false);
   const activos = ORDEN_FILTROS.filter(({ key }) => Boolean(String(filtros[key] || '').trim()));
@@ -66,40 +66,30 @@ export default function BarraContextoFiltros({
       </div>
 
       <div className="barra-contexto-filtros__slots">
-        {ORDEN_FILTROS.map(({ key, label }) => {
+        {ORDEN_FILTROS.map(({ key, label, opciones: campoOpciones }) => {
           const val = String(filtros[key] || '').trim();
-          const activo = Boolean(val);
+          const lista = opciones?.[campoOpciones] || [];
+          const listaCompleta = val && !lista.includes(val) ? [val, ...lista] : lista;
+
           return (
-            <button
-              key={key}
-              type="button"
-              className={`barra-contexto-slot${activo ? ' is-on' : ''}`}
-              onClick={() => onAbrirFiltros && onAbrirFiltros()}
-              title={activo ? `${label}: ${val}` : `${label}: Todos (clic para filtrar)`}
-            >
-              <span className="barra-contexto-slot__label">{label}</span>
-              <span className="barra-contexto-slot__value">{activo ? val : 'Todos'}</span>
-              {activo && onRemoverFiltro && (
-                <span
-                  className="barra-contexto-slot__x"
-                  role="button"
-                  tabIndex={0}
-                  title={`Quitar ${label}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoverFiltro(key);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      onRemoverFiltro(key);
-                    }
-                  }}
-                >
-                  ×
-                </span>
-              )}
-            </button>
+            <label key={key} className={`barra-filtro${val ? ' is-on' : ''}`}>
+              <span className="barra-filtro__label">{label}</span>
+              <select
+                className="barra-filtro__select"
+                value={val}
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  e.target.blur();
+                  if (onFiltroChange) onFiltroChange(key, valor);
+                }}
+                title={val ? `${label}: ${val}` : `${label}: todos`}
+              >
+                <option value="">Todos</option>
+                {listaCompleta.map((op) => (
+                  <option key={op} value={op}>{op}</option>
+                ))}
+              </select>
+            </label>
           );
         })}
       </div>
@@ -115,10 +105,6 @@ export default function BarraContextoFiltros({
             Limpiar
           </button>
         )}
-        <button type="button" className="barra-contexto-btn barra-contexto-btn--primary" onClick={onAbrirFiltros}>
-          <SlidersHorizontal size={13} />
-          Editar
-        </button>
       </div>
     </div>
   );

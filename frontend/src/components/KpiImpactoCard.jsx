@@ -25,10 +25,22 @@ export default function KpiImpactoCard({ indicador, etiquetaBase = 'iniciaron OJ
         </span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
         <span className="kpi-valor" style={{ color, fontSize: '1.7rem', lineHeight: 1 }}>
           {Number(indicador.valor).toLocaleString('es-PE')}
         </span>
+        <span className="kpi-subtexto" style={{ fontWeight: 600 }}>
+          personas
+        </span>
+        {indicador.fte != null && (
+          <>
+            <span className="kpi-subtexto" style={{ fontWeight: 800, color: '#64748b' }}>→</span>
+            <span className="kpi-valor" style={{ color, fontSize: '1.25rem', lineHeight: 1 }}>
+              {Number(indicador.fte).toLocaleString('es-PE')}
+            </span>
+            <span className="kpi-subtexto" style={{ fontWeight: 700, color }}>FTE</span>
+          </>
+        )}
         <span className="kpi-subtexto" style={{ fontWeight: 600 }}>
           de {Number(indicador.base).toLocaleString('es-PE')} que {etiquetaBase}
         </span>

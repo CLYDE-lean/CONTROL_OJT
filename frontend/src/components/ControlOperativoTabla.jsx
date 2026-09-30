@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ChevronRight } from 'lucide-react';
 import AsesorDetalleDrawer from './AsesorDetalleDrawer';
-import { KPI_OFICIALES, semaforoMayorMejor, colorSemaforoKpi } from '../utils/kpiOficiales';
+import {
+  KPI_OFICIALES,
+  semaforoMayorMejor,
+  colorSemaforoKpi,
+  calcularNotaPonderadaOjt,
+  getCondicionOjt,
+  ESCALA_CONDICION_OJT
+} from '../utils/kpiOficiales';
 
 function fmtKpi(valor) {
   if (valor === null || valor === undefined || valor === '' || Number.isNaN(parseFloat(valor))) return '—';
@@ -12,7 +19,7 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
   const [busqueda, setBusqueda] = useState('');
   const [filtroDia, setFiltroDia] = useState('');
   const [filtroResultado, setFiltroResultado] = useState(filtroInicial || '');
-  const [ordenarPor, setOrdenarPor] = useState('calidad');
+  const [ordenarPor, setOrdenarPor] = useState('score');
   const [asesorSeleccionado, setAsesorSeleccionado] = useState(null);
 
   useEffect(() => {
@@ -44,18 +51,19 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
       : true;
 
     const resultado = (a.resultado_evaluacion || a.estado_actual || a.accion_recomendada || '').toUpperCase();
+    const notaPond = calcularNotaPonderadaOjt(a.calidad_pct, a.tnps_pct, a.transferencia_pct);
     let matchResultado = true;
 
     if (filtroResultado === 'DESCONEXION') {
       matchResultado = a.requiere_regularizacion || a.es_desconexion_sin_registro || (a.resultado_evaluacion || '').includes('REGULARIZAR');
     } else if (filtroResultado === 'APROBADO') {
-      matchResultado = resultado.includes('APROBADO') || resultado.includes('EGRESADO') || resultado.includes('OPERACI') || a.es_iop === 1;
+      matchResultado = a.es_iop === 1 || resultado.includes('APROBADO') || resultado.includes('EGRESADO') || resultado.includes('OPERACI') || (notaPond >= 75.0 && a.es_baja !== 1);
     } else if (filtroResultado === 'DESAPROBADO') {
-      matchResultado = resultado.includes('DESAPROBADO') || resultado.includes('BAJA') || resultado.includes('CESADO') || a.es_baja === 1;
+      matchResultado = a.es_baja === 1 || resultado.includes('DESAPROBADO') || resultado.includes('BAJA') || resultado.includes('CESADO') || (notaPond < 65.0 && diaActual >= 3);
     } else if (filtroResultado === 'INDUCCIÓN') {
       matchResultado = diaActual <= 2;
-    } else if (filtroResultado === 'EXTENSIÓN') {
-      matchResultado = diaActual >= 6;
+    } else if (filtroResultado === 'EXTENSIÓN' || filtroResultado === 'AMPLIACIÓN') {
+      matchResultado = diaActual >= 6 || (notaPond >= 65.0 && notaPond < 75.0) || resultado.includes('EXTENSI') || resultado.includes('AMPLIA');
     } else if (filtroResultado) {
       matchResultado = resultado.includes(filtroResultado.toUpperCase());
     }
@@ -66,6 +74,11 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
   const caidasPendientesCount = asesores.filter(a => a.requiere_regularizacion || a.es_desconexion_sin_registro).length;
 
   const ordenados = [...asesoresFiltrados].sort((a, b) => {
+    if (ordenarPor === 'score') {
+      const scoreA = calcularNotaPonderadaOjt(a.calidad_pct, a.tnps_pct, a.transferencia_pct);
+      const scoreB = calcularNotaPonderadaOjt(b.calidad_pct, b.tnps_pct, b.transferencia_pct);
+      return scoreB - scoreA;
+    }
     if (ordenarPor === 'calidad')       return (parseFloat(b.calidad_pct) || -1) - (parseFloat(a.calidad_pct) || -1);
     if (ordenarPor === 'transferencia') return (parseFloat(b.transferencia_pct) || -1) - (parseFloat(a.transferencia_pct) || -1);
     if (ordenarPor === 'tnps')          return (parseFloat(b.tnps_pct) || -1) - (parseFloat(a.tnps_pct) || -1);
@@ -238,8 +251,9 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
         >
           <option value="" style={{ background: '#070b14' }}>Todos los Estados</option>
           <option value="DESCONEXION" style={{ background: '#070b14' }}>🚨 Desconexión D1→D2</option>
-          <option value="APROBADO" style={{ background: '#070b14' }}>🟢 Aprobado / Operativo</option>
-          <option value="DESAPROBADO" style={{ background: '#070b14' }}>🔴 Desaprobado / Baja</option>
+          <option value="APROBADO" style={{ background: '#070b14' }}>🟢 Aprobado (≥75%)</option>
+          <option value="AMPLIACIÓN" style={{ background: '#070b14' }}>🔵 Ampliación (65-74.9%)</option>
+          <option value="DESAPROBADO" style={{ background: '#070b14' }}>🔴 Desaprobado (&lt;65%)</option>
           <option value="INDUCCIÓN" style={{ background: '#070b14' }}>🔵 Inducción (D1-D2)</option>
           <option value="EXTENSIÓN" style={{ background: '#070b14' }}>🟠 En Extensión (D6-D8)</option>
         </select>
@@ -261,6 +275,7 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
             cursor: 'pointer'
           }}
         >
+          <option value="score" style={{ background: '#070b14' }}>Ordenar: Score OJT (Oficial)</option>
           <option value="calidad" style={{ background: '#070b14' }}>Ordenar: Calidad %</option>
           <option value="transferencia" style={{ background: '#070b14' }}>Ordenar: Transf. %</option>
           <option value="tnps" style={{ background: '#070b14' }}>Ordenar: tNPS %</option>
@@ -298,6 +313,8 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
               <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>KPI 1: TRANSF.</th>
               <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>KPI 2: tNPS</th>
               <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>KPI 3: CALIDAD</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>SCORE OJT</th>
+              <th style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>CONDICIÓN</th>
               <th style={{ padding: '6px 8px', textAlign: 'center', minWidth: '130px', fontWeight: 700 }}>ACCIÓN</th>
             </tr>
           </thead>
@@ -310,6 +327,8 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
               const esOperativo = a.es_iop === 1 || estadoStr.includes('OPERAC') || estadoStr.includes('EGRESADO') || evalStr.includes('EGRESADO') || recStr.includes('PASÓ A OPERACIONES');
               const diaActual   = a.dia_actual || a.dia_logico_ojt || 1;
               const esBucle     = diaActual > 8 && !esOperativo;
+              const notaPond    = calcularNotaPonderadaOjt(a.calidad_pct, a.tnps_pct, a.transferencia_pct);
+              const condOficial = getCondicionOjt(notaPond, { esBaja, esIop: esOperativo });
 
               return (
                 <tr
@@ -507,6 +526,34 @@ export default function ControlOperativoTabla({ asesores, onEjecutarDecision, fi
                       color: colorSemaforoKpi(semaforoMayorMejor(a.calidad_pct, KPI_OFICIALES.calidad.meta, KPI_OFICIALES.calidad.objCump))
                     }}>
                       {fmtKpi(a.calidad_pct)}
+                    </span>
+                  </td>
+
+                  {/* Score Ponderado OJT Oficial (40% Calidad + 40% TNPS + 20% Transf) */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      color: condOficial.color
+                    }}>
+                      {Number.isFinite(notaPond) ? `${notaPond}%` : '—'}
+                    </span>
+                  </td>
+
+                  {/* Condición Oficial OJT (Aprobado ≥75%, Ampliación 65-74.9%, Desaprobado <65%) */}
+                  <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <span style={{
+                      fontSize: '0.62rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 800,
+                      color: condOficial.color,
+                      background: condOficial.badgeBg,
+                      border: `1px solid ${condOficial.border}`,
+                      padding: '2px 7px',
+                      borderRadius: '5px'
+                    }}>
+                      {condOficial.label}
                     </span>
                   </td>
 

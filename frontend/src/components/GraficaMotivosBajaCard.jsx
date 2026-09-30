@@ -1,13 +1,51 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { UserX, CheckCircle2, Maximize2, X } from 'lucide-react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
+  LineElement,
+  Tooltip
+} from 'chart.js';
+import { Chart } from 'react-chartjs-2';
+import { lastCalloutPlugin, tooltipOjt, ejeXOjt, ejeYOjt, ejeYPctOjt, OJT_CHART_THEME } from '../utils/chartOjt';
 
-const BAR_COLORS = [
-  { from: '#fb7185', to: '#e11d48' },
-  { from: '#fb923c', to: '#ea580c' },
-  { from: '#fbbf24', to: '#d97706' },
-  { from: '#c084fc', to: '#7c3aed' },
-  { from: '#38bdf8', to: '#0284c7' }
-];
+ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip);
+
+const BAR_COLORS = OJT_CHART_THEME.pareto;
+
+
+const COL_LINEA = '#e2e8f0';
+const TOP_MOTIVOS = 6;
+const REFERENCIA_PARETO = 80;
+
+const totalesPlugin = {
+  id: 'motivosTotalesBarra',
+  afterDatasetsDraw(chart) {
+    const idxBar = chart.data.datasets.findIndex((d) => d.type !== 'line');
+    if (idxBar < 0) return;
+    const meta = chart.getDatasetMeta(idxBar);
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = "700 10px 'JetBrains Mono', monospace";
+    ctx.fillStyle = '#cbd5e1';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    meta.data.forEach((el, i) => {
+      const v = Number(chart.data.datasets[idxBar].data[i] || 0);
+      if (!v) return;
+      ctx.fillText(v.toLocaleString(), el.x, el.y - 3);
+    });
+    ctx.restore();
+  }
+};
+
+function abreviarMotivo(motivo = '', max = 11) {
+  const txt = String(motivo).trim().split('/')[0].trim();
+  return txt.length > max ? `${txt.slice(0, max - 1)}…` : txt;
+}
 
 function MotivoFila({ m, idx, totalBajas, maxCount, compact = false }) {
   const pct = m.porcentaje ?? (totalBajas > 0 ? Math.round((m.total_bajas / totalBajas) * 1000) / 10 : 0);
@@ -97,11 +135,12 @@ export default function GraficaMotivosBajaCard({ filtros = {} }) {
           setData({
             success: true,
             total_bajas_evaluadas: 34,
+            bajas_capacitacion_excluidas: 0,
             motivos: [
-              { motivo: 'INASISTENCIA / ABANDONO', total_bajas: 15, porcentaje: 44.1 },
-              { motivo: 'DESERCIÓN VOLUNTARIA', total_bajas: 9, porcentaje: 26.5 },
-              { motivo: 'BAJO RENDIMIENTO / EVALUACIÓN', total_bajas: 6, porcentaje: 17.6 },
-              { motivo: 'MOTIVOS PERSONALES / SALUD', total_bajas: 4, porcentaje: 11.8 }
+              { motivo: 'SIN MOTIVO REGISTRADO', total_bajas: 15, porcentaje: 44.1 },
+              { motivo: 'DESAPROBADO', total_bajas: 9, porcentaje: 26.5 },
+              { motivo: 'NO CONTACTO', total_bajas: 6, porcentaje: 17.6 },
+              { motivo: 'FAMILIAR', total_bajas: 4, porcentaje: 11.8 }
             ]
           });
         }
@@ -127,9 +166,108 @@ export default function GraficaMotivosBajaCard({ filtros = {} }) {
 
   const motivos = data?.motivos || [];
   const totalBajas = data?.total_bajas_evaluadas || motivos.reduce((a, m) => a + (m.total_bajas || 0), 0);
+  const bajasCapa = data?.bajas_capacitacion_excluidas || 0;
   const maxCount = Math.max(...motivos.map(m => m.total_bajas || 0), 1);
-  const preview = motivos.slice(0, 4);
-  const ocultos = Math.max(0, motivos.length - preview.length);
+  const top = motivos.slice(0, TOP_MOTIVOS);
+  const ocultos = Math.max(0, motivos.length - top.length);
+
+  const chartModel = useMemo(() => {
+    if (!top.length || totalBajas === 0) return null;
+
+    const counts = top.map((m) => m.total_bajas || 0);
+    const pcts = top.map((m) => (
+      m.porcentaje ?? Math.round(((m.total_bajas || 0) / totalBajas) * 1000) / 10
+    ));
+    let suma = 0;
+    const acumulados = counts.map((c) => {
+      suma += c;
+      return Math.round((suma / totalBajas) * 1000) / 10;
+    });
+    const maxCountTop = Math.max(...counts, 1);
+
+    return {
+      data: {
+        labels: top.map((m) => abreviarMotivo(m.motivo)),
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Asesores',
+            data: counts,
+            backgroundColor: counts.map((_, i) => {
+              const tone = BAR_COLORS[Math.min(i, BAR_COLORS.length - 1)];
+              return i === 0 ? tone.from : `${tone.solid}dd`;
+            }),
+            borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+            borderSkipped: false,
+            barPercentage: 0.62,
+            categoryPercentage: 0.78
+          },
+          {
+            type: 'line',
+            label: `Referencia ${REFERENCIA_PARETO}%`,
+            data: top.map(() => REFERENCIA_PARETO),
+            yAxisID: 'y1',
+            borderColor: 'rgba(251,191,36,0.45)',
+            borderDash: [6, 5],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            pointHoverRadius: 0
+          },
+          {
+            type: 'line',
+            label: '% acumulado',
+            data: acumulados,
+            yAxisID: 'y1',
+            borderColor: COL_LINEA,
+            borderWidth: 2,
+            tension: 0.3,
+            pointBackgroundColor: acumulados.map((_, i) => (i === acumulados.length - 1 ? '#ffffff' : '#0b1224')),
+            pointBorderColor: COL_LINEA,
+            pointBorderWidth: 2,
+            pointRadius: acumulados.map((_, i) => (i === acumulados.length - 1 ? 5.5 : 3.5)),
+            pointHoverRadius: 6
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 350 },
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { top: 14, right: 2, left: 0, bottom: 0 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            ...tooltipOjt,
+            filter: (item) => !String(item.dataset.label).startsWith('Referencia'),
+            callbacks: {
+              title: (items) => {
+                const i = items[0]?.dataIndex ?? 0;
+                return `${i + 1}. ${top[i]?.motivo || ''}`;
+              },
+              label(item) {
+                const v = item.parsed.y ?? 0;
+                if (item.dataset.yAxisID === 'y1') return ` ${item.dataset.label}: ${v.toFixed(1)}%`;
+                return ` ${item.dataset.label}: ${v.toLocaleString()}`;
+              },
+              afterBody(items) {
+                const i = items[0]?.dataIndex ?? 0;
+                return [`${pcts[i]}% de ${totalBajas} bajas en OJT`];
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ...ejeXOjt,
+            ticks: { ...ejeXOjt.ticks, font: { size: 9, weight: '600' }, maxRotation: 0, autoSkip: false }
+          },
+          y: ejeYOjt({ suggestedMax: maxCountTop * 1.15 }),
+          y1: ejeYPctOjt({ max: 100 })
+        }
+      }
+    };
+  }, [top, totalBajas]);
 
   return (
     <>
@@ -167,10 +305,10 @@ export default function GraficaMotivosBajaCard({ filtros = {} }) {
             </div>
             <div style={{ minWidth: 0 }}>
               <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f8fafc', fontFamily: "'Inter',sans-serif" }}>
-                Motivos de baja
+                Motivos de baja en OJT
               </span>
               <div style={{ fontSize: '0.58rem', color: '#64748b', fontWeight: 600 }}>
-                {motivos.length} CATEGORÍAS · {totalBajas} PERSONAS
+                {motivos.length} CATEGORÍAS · DESDE EL INICIO DE OJT
               </div>
             </div>
           </div>
@@ -181,7 +319,7 @@ export default function GraficaMotivosBajaCard({ filtros = {} }) {
               borderRadius: '999px',
               padding: '3px 9px'
             }}>
-              <span style={{ fontSize: '0.62rem', color: '#fda4af', fontWeight: 600 }}>Bajas </span>
+              <span style={{ fontSize: '0.62rem', color: '#fda4af', fontWeight: 600 }}>Bajas OJT </span>
               <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#fb7185', fontFamily: "'JetBrains Mono',monospace" }}>
                 {totalBajas}
               </span>
@@ -223,29 +361,44 @@ export default function GraficaMotivosBajaCard({ filtros = {} }) {
             <span>Sin bajas registradas</span>
           </div>
         ) : (
-          <div
-            onClick={() => setModalOpen(true)}
-            style={{
-              flex: 1,
-              minHeight: 0,
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '7px',
-              position: 'relative',
-              zIndex: 1,
-              cursor: 'pointer',
-              paddingTop: '2px',
-              paddingRight: '2px'
-            }}
-          >
-            {preview.map((m, idx) => (
-              <MotivoFila key={m.motivo || idx} m={m} idx={idx} totalBajas={totalBajas} maxCount={maxCount} compact />
-            ))}
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            zIndex: 1
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
+              fontSize: '0.58rem', color: '#94a3b8', fontWeight: 600, marginBottom: '2px'
+            }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <i style={{ width: 8, height: 8, borderRadius: 2, background: BAR_COLORS[0].from }} />
+                Asesores por motivo
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <i style={{ width: 8, height: 8, borderRadius: '50%', background: COL_LINEA }} />
+                % acumulado
+              </span>
+              <span style={{ marginLeft: 'auto', color: '#64748b' }}>
+                Top {top.length} de {motivos.length} motivos
+              </span>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              <Chart
+                type="bar"
+                data={chartModel.data}
+                options={chartModel.options}
+                plugins={[lastCalloutPlugin, totalesPlugin]}
+              />
+            </div>
+
             {ocultos > 0 && (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setModalOpen(true); }}
+                onClick={() => setModalOpen(true)}
                 style={{
                   marginTop: '2px',
                   background: 'transparent',
@@ -256,7 +409,8 @@ export default function GraficaMotivosBajaCard({ filtros = {} }) {
                   fontFamily: "'Inter',sans-serif",
                   cursor: 'pointer',
                   textAlign: 'left',
-                  padding: 0
+                  padding: 0,
+                  flexShrink: 0
                 }}
               >
                 + {ocultos} motivos más — abrir detalle
@@ -304,10 +458,11 @@ export default function GraficaMotivosBajaCard({ filtros = {} }) {
             }}>
               <div>
                 <div style={{ fontSize: '1rem', fontWeight: 800, color: '#f8fafc', fontFamily: "'Inter',sans-serif" }}>
-                  Detalle de motivos de baja
+                  Detalle de motivos de baja en OJT
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
-                  {motivos.length} categorías · {totalBajas} asesores únicos · ranking por volumen
+                  {motivos.length} categorías · {totalBajas} asesores únicos cesados desde el inicio de OJT
+                  {bajasCapa > 0 && ` · ${bajasCapa} bajas de capacitación excluidas`}
                 </div>
               </div>
               <button

@@ -12,7 +12,6 @@ import FormadorView           from './components/FormadorView';
 import GerenciaView           from './components/GerenciaView';
 import ImpactoLock            from './components/ImpactoLock';
 import RankingFormadoresView  from './components/RankingFormadoresView';
-import FiltroFlotantePro      from './components/FiltroFlotantePro';
 import ScatterVolumenVsCalidad from './components/ScatterVolumenVsCalidad';
 import FlashOjtResumenCard    from './components/FlashOjtResumenCard';
 import ExcelFlashOjtView      from './components/ExcelFlashOjtView';
@@ -24,10 +23,12 @@ import TacometrosHeroPanel    from './components/TacometrosHeroPanel';
 import GraficaLlamadasDiaCard from './components/GraficaLlamadasDiaCard';
 import GraficaMotivosBajaCard from './components/GraficaMotivosBajaCard';
 import DetalleAuditoriaModal  from './components/DetalleAuditoriaModal';
+import FlashOjtEnCursoCard    from './components/FlashOjtEnCursoCard';
 import BarraContextoFiltros from './components/BarraContextoFiltros';
 import CapacidadRysView from './components/CapacidadRysView';
 import { verificarAcceso } from './services/accesoImpacto';
-import { sumFte } from './utils/fte';
+import { resumenFte } from './utils/fte';
+import { kpiPctValido } from './utils/kpiOficiales';
 import { personaCohorteKey } from './utils/personaKey';
 
 
@@ -45,9 +46,9 @@ export default function App() {
   });
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [datosStamp, setDatosStamp] = useState(0);
   const [modalDecision, setModalDecision] = useState(null);
   const [modalAuditoriaOpen, setModalAuditoriaOpen] = useState(false);
-  const [drawerFiltrosOpen, setDrawerFiltrosOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   const [impactoDesbloqueado, setImpactoDesbloqueado] = useState(false);
@@ -102,11 +103,15 @@ export default function App() {
     setSubVistaOperacion('ranking');
   };
 
-  const cargarDatos = useCallback(async () => {
+  const cargarDatos = useCallback(async (opts = {}) => {
     setCargando(true);
     try {
+      if (opts.force) {
+        await fetch('/api/ojt/refresh-cache');
+      }
       const res = await fetchDashboardResumen(filtros);
       setData(res);
+      setDatosStamp(Date.now());
     } catch (err) {
       console.error('Error al cargar datos:', err);
     } finally {
@@ -154,13 +159,19 @@ export default function App() {
     ingresaronOp.push(a);
   }
   const iopUnicos = ingresaronOp.length || Number(embudo?.supervivencia?.llegaron_op || 0);
-  const dotacionFte = ingresaronOp.length > 0 ? sumFte(ingresaronOp) : iopUnicos;
+  const iopResumen = resumenFte(ingresaronOp);
+  const dotacionFte = ingresaronOp.length > 0
+    ? iopResumen.ftes
+    : Number(embudo?.supervivencia?.llegaron_op_fte ?? iopUnicos);
+  const subtituloIop = ingresaronOp.length > 0
+    ? `${iopResumen.personas} personas · ${iopResumen.ftes} FTE · ${iopResumen.ft} FT · ${iopResumen.pt} PT · sin dato = FT`
+    : `${iopUnicos} personas · ${dotacionFte} FTE · FT=1 · PT=0.5 · sin dato = FT`;
   const kpiAgregado = data?.matriz?.metricas_kpi || {};
 
-  const avgTransf = kpiAgregado.transferencia_pct ?? null;
-  const avgTnps = kpiAgregado.tnps_pct ?? null;
-  const avgCalidad = kpiAgregado.calidad_pct ?? null;
-  const scorePonderado = kpiAgregado.score_ponderado ?? null;
+  const avgTransf = kpiPctValido(kpiAgregado.transferencia_pct);
+  const avgTnps = kpiPctValido(kpiAgregado.tnps_pct);
+  const avgCalidad = kpiPctValido(kpiAgregado.calidad_pct);
+  const scorePonderado = kpiPctValido(kpiAgregado.score_ponderado);
 
   return (
     <div className="dashboard-container">
@@ -172,10 +183,8 @@ export default function App() {
           onCambiarVista={setVistaActiva}
           totalDecisionesPendientes={totalPendientes}
           dbConnected={data?.success || false}
-          onActualizar={cargarDatos}
+          onActualizar={() => cargarDatos({ force: true })}
           totalAsesores={total}
-          filtros={filtros}
-          onAbrirFiltros={() => setDrawerFiltrosOpen(true)}
           impactoBloqueado={!impactoDesbloqueado}
           statusSlot={(
             <RealtimeBadge
@@ -191,10 +200,10 @@ export default function App() {
         {vistaActiva !== 'capacidad' && (
           <BarraContextoFiltros
             filtros={filtros}
+            opciones={data?.filtros_disponibles}
             totalAsesores={total}
-            onAbrirFiltros={() => setDrawerFiltrosOpen(true)}
+            onFiltroChange={handleFiltroChange}
             onLimpiarFiltros={handleLimpiarFiltros}
-            onRemoverFiltro={(k) => handleFiltroChange(k, '')}
           />
         )}
       </div>
@@ -228,30 +237,52 @@ export default function App() {
                 scorePonderado={scorePonderado}
                 totalAsesores={iopUnicos}
                 totalFte={dotacionFte}
+                subtituloIop={subtituloIop}
                 subVistaOperacion={subVistaOperacion}
                 onCambiarSubVista={setSubVistaOperacion}
               />
 
               {/* Fila 2 (1fr): Sub-tab activo */}
-              {subVistaOperacion === 'ranking' ? (
-                  <div className="operacion-charts-stack">
-                    <div className="operacion-mid-charts">
-                      <GraficaLlamadasDiaCard filtros={filtros} />
-                      <GraficaMotivosBajaCard filtros={filtros} />
+              {subVistaOperacion === 'ranking' && (
+                <div className="operacion-charts-stack">
+                  {/* ── Fila superior: Flash OJT En Curso (Tal cual la Imagen 2) ── */}
+                  <div className="operacion-flash-row">
+                    <FlashOjtEnCursoCard
+                      data={data}
+                      filtros={filtros}
+                      onGrupoSelect={(g) => handleFiltroChange('grupo', g)}
+                    />
+                  </div>
+
+                  {/* ── Fila inferior: Embudo D1-D8 + Ranking de Formadores ── */}
+                  <div className="operacion-ranking-grid">
+                    <div className="operacion-chart-cell">
+                      <Embudo5DiasView
+                        embudoData={data?.embudo}
+                        onAuditarEnTabla={handleAuditarCaidasEnTabla}
+                      />
                     </div>
-                    <div className="operacion-ranking-grid">
-                      <div className="operacion-chart-cell">
-                        <Embudo5DiasView
-                          embudoData={data?.embudo}
-                          onAuditarEnTabla={handleAuditarCaidasEnTabla}
-                        />
-                      </div>
-                      <div className="operacion-chart-cell">
-                        <RankingFormadoresView filtros={filtros} />
-                      </div>
+                    <div className="operacion-chart-cell">
+                      <RankingFormadoresView filtros={filtros} recarga={datosStamp} />
                     </div>
                   </div>
-              ) : (
+                </div>
+              )}
+
+              {/* ── Nuevo Apartado Reasignado: Llamadas por Día & Motivos de Baja OJT ── */}
+              {subVistaOperacion === 'llamadas_bajas' && (
+                <div className="operacion-mid-charts" style={{ height: '100%', minHeight: 0, padding: '4px 0' }}>
+                  <div className="operacion-chart-cell">
+                    <GraficaLlamadasDiaCard filtros={filtros} />
+                  </div>
+                  <div className="operacion-chart-cell">
+                    <GraficaMotivosBajaCard filtros={filtros} />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Sub-tab: Evolución (Tabla Control Operativo) ── */}
+              {subVistaOperacion === 'evolucion' && (
                 <div style={{ height: '100%', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                   <ControlOperativoTabla
                     asesores={data?.matriz?.asesores}
@@ -319,18 +350,6 @@ export default function App() {
         isOpen={modalAuditoriaOpen}
         onClose={() => setModalAuditoriaOpen(false)}
         filtros={filtros}
-      />
-
-      {/* ── Drawer de Filtros BI Avanzados (Sin botón flotante que tape la tabla) ── */}
-      <FiltroFlotantePro
-        filtros={filtros}
-        opciones={data?.filtros_disponibles}
-        onFiltroChange={handleFiltroChange}
-        onLimpiarFiltros={handleLimpiarFiltros}
-        totalFiltrado={data?.embudo?.total_asesores_unicos || 0}
-        cargando={cargando}
-        abierto={drawerFiltrosOpen}
-        onToggle={setDrawerFiltrosOpen}
       />
     </div>
   );

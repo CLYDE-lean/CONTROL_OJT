@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, Users, DollarSign, TrendingUp, CalendarRange, Sun, Moon, SlidersHorizontal, Lock } from 'lucide-react';
+import { BarChart3, Users, DollarSign, TrendingUp, CalendarRange, Sun, Moon, Lock } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import GEA_LOGO_URL from '../assets/geaLogoAsset.js';
 
@@ -17,13 +17,10 @@ export default function Navbar({
   totalDecisionesPendientes,
   dbConnected,
   onActualizar,
-  filtros = {},
-  onAbrirFiltros,
   statusSlot = null,
   impactoBloqueado = false
 }) {
   const { isDark, toggleTheme } = useTheme();
-  const activos = Object.entries(filtros).filter(([, v]) => Boolean(v));
 
   return (
     <header className="header-compacto">
@@ -147,47 +144,6 @@ export default function Navbar({
               flexShrink: 0
             }}
           />
-
-          {/* ── Botón Corporativo Filtros BI en Barra Superior ── */}
-          {onAbrirFiltros && (
-            <button
-              onClick={onAbrirFiltros}
-              style={{
-                height: '26px',
-                padding: '0 8px',
-                fontSize: '0.68rem',
-                fontWeight: 600,
-                color: activos.length > 0 ? '#38bdf8' : '#e2e8f0',
-                background: activos.length > 0 ? 'rgba(56, 189, 248, 0.14)' : 'rgba(255, 255, 255, 0.06)',
-                border: `1px solid ${activos.length > 0 ? '#38bdf8' : 'rgba(255, 255, 255, 0.12)'}`,
-                borderRadius: '5px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                cursor: 'pointer',
-                fontFamily: "'Inter', sans-serif",
-                transition: 'all 0.15s ease',
-                whiteSpace: 'nowrap'
-              }}
-              title="Abrir panel de filtros avanzados"
-            >
-              <SlidersHorizontal size={12} />
-              <span>Filtros</span>
-              {activos.length > 0 && (
-                <span style={{
-                  background: '#38bdf8',
-                  color: '#0f172a',
-                  borderRadius: '10px',
-                  padding: '1px 5px',
-                  fontSize: '0.58rem',
-                  fontWeight: 700,
-                  fontFamily: "'JetBrains Mono', monospace"
-                }}>
-                  {activos.length}
-                </span>
-              )}
-            </button>
-          )}
 
           {/* ── Botón Minimalista Modo Oscuro / Claro Plano ── */}
           <button

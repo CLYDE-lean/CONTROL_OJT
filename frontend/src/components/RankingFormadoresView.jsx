@@ -33,7 +33,7 @@ const FALLBACK_FORMADORES = [
 /* ─────────────────────────────────────────────────────────
    Componente principal
 ───────────────────────────────────────────────────────── */
-export default function RankingFormadoresView({ filtros = {} }) {
+export default function RankingFormadoresView({ filtros = {}, recarga = 0 }) {
   const [data,      setData]     = useState(null);
   const [cargando,  setCargando] = useState(true);
   const [modalOpen, setModal]    = useState(false);
@@ -59,7 +59,7 @@ export default function RankingFormadoresView({ filtros = {} }) {
       } finally { setCargando(false); }
     };
     cargar();
-  }, [filtros.campana, filtros.semana, filtros.modalidad, filtros.formador, filtros.grupo]);
+  }, [filtros.campana, filtros.semana, filtros.modalidad, filtros.formador, filtros.grupo, recarga]);
 
   useEffect(() => {
     document.body.style.overflow = modalOpen ? 'hidden' : '';
@@ -72,6 +72,7 @@ export default function RankingFormadoresView({ filtros = {} }) {
     total_ftes: Number(f.total_ftes !== undefined ? f.total_ftes : f.total_ingresaron),
     full_time:  Number(f.full_time  !== undefined ? f.full_time  : f.total_ingresaron),
     part_time:  Number(f.part_time  !== undefined ? f.part_time  : 0),
+    total_egresados_fte: Number(f.total_egresados_fte !== undefined ? f.total_egresados_fte : (f.total_egresados ?? 0)),
   }));
 
   const totales = data?.totales || {
@@ -79,6 +80,8 @@ export default function RankingFormadoresView({ filtros = {} }) {
     ftes:      formadores.reduce((a, f) => a + (f.total_ftes      || 0), 0),
     full_time: formadores.reduce((a, f) => a + (f.full_time       || 0), 0),
     part_time: formadores.reduce((a, f) => a + (f.part_time       || 0), 0),
+    iop_personas: formadores.reduce((a, f) => a + (f.total_egresados || 0), 0),
+    iop_ftes: formadores.reduce((a, f) => a + (f.total_egresados_fte || 0), 0),
   };
 
   const ordenados = [...formadores].sort((a, b) =>
@@ -119,7 +122,7 @@ export default function RankingFormadoresView({ filtros = {} }) {
             Dotación por Formador
           </h2>
           <span style={{ fontSize: '0.62rem', color: '#64748b', fontFamily: "'Inter',sans-serif" }}>
-            {totales.personas} personas · {formadores.length} formadores
+            {totales.personas} personas · {totales.ftes} FTE · FT=1 · PT=0.5
           </span>
         </div>
 
@@ -201,7 +204,7 @@ export default function RankingFormadoresView({ filtros = {} }) {
                         }}
                           onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = `0 0 18px ${cfg.glow}99`; }}
                           onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)';   e.currentTarget.style.boxShadow = `0 0 12px ${cfg.glow}55, inset 0 0 6px rgba(0,0,0,0.4)`; }}
-                          title={`${f.formador}: ${f.total_ingresaron} personas · D5 ${f.retencion_dia5_pct ?? 0}% · IOP ${f.total_egresados ?? f.total_operativos ?? 0}`}
+                          title={`${f.formador}: ${f.total_ingresaron} personas · ${f.total_ftes} FTE · D5 ${f.retencion_dia5_pct ?? 0}% · IOP ${f.total_egresados ?? f.total_operativos ?? 0} (${f.total_egresados_fte ?? f.total_egresados ?? 0} FTE)`}
                         >
                           <span style={{
                             fontSize: '0.88rem',
@@ -382,9 +385,9 @@ export default function RankingFormadoresView({ filtros = {} }) {
 
           {/* KPIs resumen */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-            <KpiMini label="Total Dotación"  valor={`${totales.personas}`}             extra={`${totales.ftes} FTE`}   sub="DNI únicos asignados"       color="#38bdf8" icon={Users}    />
+            <KpiMini label="Total Dotación"  valor={`${totales.personas}`}             extra={`${totales.ftes} FTE`}   sub="FT = 1 FTE · PT = 0.5 FTE"       color="#38bdf8" icon={Users}    />
             <KpiMini label="Mayor dotación"  valor={`${ordenados[0]?.total_ingresaron || 0}`} extra={`${ordenados[0]?.total_ftes || 0} FTE`} sub={formatNombreCorto(ordenados[0]?.formador)} color="#3C9D5C" icon={Award}    />
-            <KpiMini label="Régimen FT / PT" valor={`${totales.full_time} FT · ${totales.part_time} PT`} sub="FT = 1.0 FTE | PT = 0.5 FTE" color="#a78bfa" icon={Briefcase} />
+            <KpiMini label="I-OP / Régimen" valor={`${totales.iop_personas ?? 0} · ${totales.iop_ftes ?? 0} FTE`} sub={`${totales.full_time} FT · ${totales.part_time} PT`} color="#a78bfa" icon={Briefcase} />
           </div>
 
           {/* Cabecera tabla */}

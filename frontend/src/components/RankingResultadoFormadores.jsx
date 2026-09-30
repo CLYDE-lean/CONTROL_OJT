@@ -1,5 +1,6 @@
 import React from 'react';
 import { personaCohorteKey } from '../utils/personaKey';
+import { fteDeAsesor } from '../utils/fte';
 
 const MIN_N = 15;
 
@@ -23,12 +24,14 @@ function buildRanking(asesores, campusPct) {
     const rawName = a.formador || 'SIN FORMADOR';
     const key = String(rawName).trim().toUpperCase();
     if (!byFormador.has(key)) {
-      byFormador.set(key, { formador: rawName, formadorKey: key, n: 0, iop: 0, bajas: 0 });
+      byFormador.set(key, { formador: rawName, formadorKey: key, n: 0, iop: 0, iopFte: 0, bajas: 0 });
     }
     const g = byFormador.get(key);
     g.n += 1;
-    if (Number(a.es_iop) === 1) g.iop += 1;
-    else if (Number(a.es_baja) === 1) g.bajas += 1;
+    if (Number(a.es_iop) === 1) {
+      g.iop += 1;
+      g.iopFte += fteDeAsesor(a);
+    } else if (Number(a.es_baja) === 1) g.bajas += 1;
   });
 
   return Array.from(byFormador.values())
@@ -37,6 +40,7 @@ function buildRanking(asesores, campusPct) {
       const pctBajas = g.n > 0 ? Math.round((g.bajas / g.n) * 1000) / 10 : 0;
       return {
         ...g,
+        iopFte: Math.round(g.iopFte * 10) / 10,
         pctIop,
         pctBajas,
         delta: Math.round((pctIop - campusPct) * 10) / 10,
@@ -141,7 +145,7 @@ export default function RankingResultadoFormadores({
               key={row.formadorKey}
               type="button"
               onClick={() => onSelect?.(active ? null : row.formador)}
-              title={`${row.formador} · ${row.n} personas · IOP ${row.pctIop}% (${deltaTxt} vs campus) · bajas ${row.pctBajas}%`}
+              title={`${row.formador} · ${row.n} personas · IOP ${row.iop} (${row.iopFte} FTE) · ${row.pctIop}% (${deltaTxt} vs campus) · bajas ${row.pctBajas}%`}
               style={{
                 display: 'flex',
                 flexDirection: 'column',

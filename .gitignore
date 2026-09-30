@@ -19,8 +19,12 @@ build/
 .vercel
 .netlify
 
-# Archivos de SO e IDEs
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+.agents/
+.cursor/
+*.bak
+*skills-lock.json
+

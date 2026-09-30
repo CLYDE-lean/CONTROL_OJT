@@ -3,7 +3,7 @@ import { Users, Wrench, LogOut, Clock } from 'lucide-react';
 import ScatterVolumenVsCalidad from './ScatterVolumenVsCalidad';
 import RankingResultadoFormadores from './RankingResultadoFormadores';
 import MatrizCohorteAulas from './MatrizCohorteAulas';
-import { sumFte } from '../utils/fte';
+import { resumenFte } from '../utils/fte';
 
 function KpiMini({ titulo, valor, extra, sub, color, Icon }) {
   return (
@@ -60,7 +60,8 @@ export default function FormadorView({ data }) {
 
   const iopAsesores = listAsesores.filter(a => Number(a.es_iop) === 1);
   const egresadosOp = iopAsesores.length;
-  const iopFte = sumFte(iopAsesores);
+  const iopResumen = resumenFte(iopAsesores);
+  const iopFte = iopResumen.ftes;
   const bajas = listAsesores.filter(a => Number(a.es_baja) === 1 && Number(a.es_iop) !== 1).length;
   const enCurso = Math.max(0, total - egresadosOp - bajas);
   const campusPct = total > 0 ? Math.round((egresadosOp / total) * 1000) / 10 : 0;
@@ -80,10 +81,10 @@ export default function FormadorView({ data }) {
       <div className="formador-kpis">
         <KpiMini titulo="Iniciaron OJT" valor={iniciaron.toLocaleString()} sub="asistencia con DIA_CONEXION = 1" color="#38bdf8" Icon={Users} />
         <KpiMini
-          titulo="IOP"
+          titulo="I-OP"
           valor={egresadosOp.toLocaleString()}
-          extra={`${iopFte} FTE`}
-          sub={`${pct(egresadosOp)} a operación`}
+          extra={`→ ${iopFte} FTE`}
+          sub={`${iopResumen.ft} FT · ${iopResumen.pt} PT · sin dato = FT`}
           color="#34d399"
           Icon={Wrench}
         />

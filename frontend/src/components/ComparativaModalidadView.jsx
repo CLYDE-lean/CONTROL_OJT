@@ -105,7 +105,9 @@ export default function ComparativaModalidadView({ filtros = {} }) {
                   </div>
                   <div>
                     <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f1c2e' }}>{m.modalidad}</h4>
-                    <span style={{ fontSize: '0.7rem', color: '#7a90ad' }}>{m.total_ingresaron.toLocaleString()} asesores ingresaron</span>
+                    <span style={{ fontSize: '0.7rem', color: '#7a90ad' }}>
+                      {m.total_ingresaron.toLocaleString()} asesores · {(m.total_ftes ?? m.total_ingresaron).toLocaleString('es-PE')} FTE
+                    </span>
                   </div>
                 </div>
               </div>
@@ -149,6 +151,9 @@ export default function ComparativaModalidadView({ filtros = {} }) {
                     background: mainColor,
                     borderRadius: '4px'
                   }} />
+                </div>
+                <div style={{ fontSize: '0.68rem', color: '#3d5275', marginTop: '0.25rem' }}>
+                  {m.total_operativos.toLocaleString()} I-OP · {(m.iop_fte ?? m.total_operativos).toLocaleString('es-PE')} FTE (FT=1 · PT=0.5)
                 </div>
               </div>
 
