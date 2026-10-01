@@ -53,16 +53,23 @@ const startServer = (portToUse) => {
     // Auto-test de conexión y campañas disponibles en Supabase (via pg pool)
     try {
       const db = require('./config/database');
-      const testRes = await db.query(`
-        SELECT TRIM(CAST("CAMPAÑA" AS VARCHAR)) as c, COUNT(*) as total
-        FROM public."CONTROL"
-        WHERE "CAMPAÑA" IS NOT NULL
-        GROUP BY TRIM(CAST("CAMPAÑA" AS VARCHAR))
-        ORDER BY total DESC
-        LIMIT 5;
-      `);
-      console.log('✅ Conexión Supabase (pg pool) exitosa. Campañas en BD:');
-      testRes.rows.forEach(r => console.log(`   • "${r.c}" — ${r.total} registros`));
+      const ojtMetricsService = require('./services/ojtMetricsService');
+      const active = await ojtMetricsService.getActiveTable();
+      if (active.table) {
+        const cols = await ojtMetricsService.getColumnNames(active.table);
+        const testRes = await db.query(`
+          SELECT TRIM(CAST(${cols.campanaCol} AS VARCHAR)) as c, COUNT(*) as total
+          FROM public."${active.table}"
+          WHERE ${cols.campanaCol} IS NOT NULL
+          GROUP BY TRIM(CAST(${cols.campanaCol} AS VARCHAR))
+          ORDER BY total DESC
+          LIMIT 5;
+        `);
+        console.log(`✅ Conexión Supabase (${active.table} — ${active.total_rows} registros) exitosa. Campañas:`);
+        testRes.rows.forEach(r => console.log(`   • "${r.c}" — ${r.total} registros`));
+      } else {
+        console.log('⚠️ Conectado a Supabase pero no se detectaron registros en las tablas.');
+      }
     } catch (err) {
       console.error('❌ Error pg pool Supabase:', err.message);
       console.error('   → Verifica el archivo backend/.env y la variable DATABASE_URL_SUPABASE');

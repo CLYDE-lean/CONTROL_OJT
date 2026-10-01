@@ -190,7 +190,7 @@ export default function ExcelFlashOjtView({ filters = {} }) {
               Control de Deserción Pre-Operativa: {des.pct_desercion || 0}%
             </strong>
             <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-              Umbral: 🟢 ≤ 40% | 🔴 > 40% (Total Bajas: {des.total_bajas || 0} de {des.total_evaluados || 0})
+              Umbral: 🟢 ≤ 40% | 🔴 &gt; 40% (Total Bajas: {des.total_bajas || 0} de {des.total_evaluados || 0})
             </span>
           </div>
         </div>

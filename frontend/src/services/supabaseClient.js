@@ -6,7 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ymshmjwgekuqwrfqforg.supabase.co';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ujqehcpglfhnytzsyedp.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltc2htandnZWt1cXdyZnFmb3JnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNzQ5NzAsImV4cCI6MjA5OTY1MDk3MH0.5DmW7GVhf9bOrq3CBlb7wFI--vGQyapjOXmBOf2Ihx4';
 
 /**
@@ -25,10 +25,10 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 /**
  * Tablas disponibles en Supabase
- * @type {{CONTROL: string, DIM_ASESORES: string, DIM_FORMADORES: string, DIM_CAMPANAS: string, HECHOS_CALIDAD: string, OJT_PREDICCIONES: string, OJT_ENTRENAMIENTO: string}}
  */
 export const TABLES = {
-  CONTROL: 'CONTROL',
+  CONTROL: 'control_ojt',
+  CONTROL_OJT: 'control_ojt',
   DIM_ASESORES: 'dim_asesores',
   DIM_FORMADORES: 'dim_formadores',
   DIM_CAMPANAS: 'dim_campanas',
