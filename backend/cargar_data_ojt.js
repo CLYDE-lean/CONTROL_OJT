@@ -60,15 +60,22 @@ function parseStr(val, defaultVal = null) {
   return s;
 }
 
-// Parser CSV robusto que respeta campos con comillas, tabulaciones o comas
+// Parser CSV robusto que respeta campos con comillas, tabulaciones, comas o punto y coma
 function parseCSV(content) {
-  // Detectar delimitador: tabulación o coma o punto y coma
-  const firstLine = content.split(/\r?\n/)[0] || '';
-  let delimiter = ',';
-  if (firstLine.includes('\t')) delimiter = '\t';
-  else if (firstLine.includes(';') && !firstLine.includes(',')) delimiter = ';';
+  // Limpiar BOM UTF-8 si existe
+  content = content.replace(/^\uFEFF/, '');
 
-  console.log(`Detectado delimitador: [${delimiter === '\t' ? 'TABULADOR' : delimiter}]`);
+  // Detectar delimitador según mayor frecuencia en la primera línea
+  const firstLine = content.split(/\r?\n/)[0] || '';
+  const tabs = (firstLine.match(/\t/g) || []).length;
+  const semicolons = (firstLine.match(/;/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+
+  let delimiter = ',';
+  if (tabs > semicolons && tabs > commas) delimiter = '\t';
+  else if (semicolons > 0 && semicolons >= commas) delimiter = ';';
+
+  console.log(`Detectado delimitador: [${delimiter === '\t' ? 'TABULADOR' : delimiter === ';' ? 'PUNTO Y COMA (;)' : delimiter}]`);
 
   const lines = content.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length < 2) return [];
@@ -76,7 +83,7 @@ function parseCSV(content) {
   // Parsear encabezados normalizados
   const rawHeaders = splitLine(lines[0], delimiter);
   const headers = rawHeaders.map(h => normalizeHeader(h));
-  console.log('Encabezados encontrados:', headers);
+  console.log('Encabezados encontrados:', headers.filter(Boolean));
 
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
@@ -84,7 +91,9 @@ function parseCSV(content) {
     if (rawCols.length === 0 || (rawCols.length === 1 && !rawCols[0].trim())) continue;
     const row = {};
     headers.forEach((h, idx) => {
-      row[h] = rawCols[idx] !== undefined ? rawCols[idx].trim() : null;
+      if (h) {
+        row[h] = rawCols[idx] !== undefined ? rawCols[idx].trim() : null;
+      }
     });
     rows.push(row);
   }
@@ -112,6 +121,7 @@ function splitLine(line, delimiter) {
 
 // Normalizar nombres de columnas de SQL Server a las columnas estándar esperadas
 function normalizeHeader(h) {
+  if (!h || !h.trim()) return '';
   const s = h.trim().toUpperCase()
     .replace(/Á/g, 'A').replace(/É/g, 'E').replace(/Í/g, 'I').replace(/Ó/g, 'O').replace(/Ú/g, 'U')
     .replace(/Ñ/g, 'N');
@@ -169,7 +179,14 @@ function normalizeHeader(h) {
 
 async function cargarArchivo(filePath) {
   try {
-    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+    let fullPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+    if (!fs.existsSync(fullPath)) {
+      const altPath = path.join(__dirname, '..', filePath);
+      if (fs.existsSync(altPath)) {
+        fullPath = altPath;
+      }
+    }
+
     if (!fs.existsSync(fullPath)) {
       console.error(`❌ El archivo no existe en la ruta: ${fullPath}`);
       process.exit(1);
@@ -186,6 +203,32 @@ async function cargarArchivo(filePath) {
       process.exit(0);
     }
 
+    // Deduplicar filas por clave primaria (dni + cod_grupo + fecha_asistencia) para evitar conflicto en el mismo batch
+    const dedupeMap = new Map();
+    let duplicadosDetectados = 0;
+    let filasSinClave = 0;
+
+    for (const r of rows) {
+      const dni = parseStr(r.dni);
+      const cod_grupo = parseStr(r.cod_grupo) || 'SIN_GRUPO';
+      const fecha = parseFecha(r.fecha_asistencia);
+      if (!dni || !fecha) {
+        filasSinClave++;
+        continue;
+      }
+      const key = `${dni}_${cod_grupo}_${fecha}`;
+      if (dedupeMap.has(key)) {
+        duplicadosDetectados++;
+      }
+      dedupeMap.set(key, r);
+    }
+
+    const uniqueRows = Array.from(dedupeMap.values());
+    console.log(`✨ Filas únicas consolidadas: ${uniqueRows.length} (se consolidaron ${duplicadosDetectados} registros duplicados en el origen)`);
+    if (filasSinClave > 0) {
+      console.log(`⚠️ Registros sin DNI o Fecha válida omitidos: ${filasSinClave}`);
+    }
+
     const client = await pool.connect();
     console.log('⚡ Conectado a Supabase. Iniciando carga en tabla control_ojt...');
 
@@ -194,8 +237,8 @@ async function cargarArchivo(filePath) {
     let insertados = 0;
     let omitidos = 0;
 
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < uniqueRows.length; i += BATCH_SIZE) {
+      const batch = uniqueRows.slice(i, i + BATCH_SIZE);
       const values = [];
       const placeholders = [];
       let pIdx = 1;
@@ -291,7 +334,7 @@ async function cargarArchivo(filePath) {
 
       await client.query(queryText, values);
       insertados += placeholders.length;
-      process.stdout.write(`\r⏳ Progreso: ${insertados} / ${rows.length} registros procesados...`);
+      process.stdout.write(`\r⏳ Progreso: ${insertados} / ${uniqueRows.length} registros procesados...`);
     }
 
     client.release();
