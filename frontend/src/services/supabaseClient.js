@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ujqehcpglfhnytzsyedp.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inltc2htandnZWt1cXdyZnFmb3JnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNzQ5NzAsImV4cCI6MjA5OTY1MDk3MH0.5DmW7GVhf9bOrq3CBlb7wFI--vGQyapjOXmBOf2Ihx4';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqcWVoY3BnbGZobnl0enN5ZWRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NjA3NTYsImV4cCI6MjEwMTMzNjc1Nn0.smga3kyVkX_hiMA42e8zs4VNaB8nubTeDLapsX4zvqA';
 
 /**
  * Cliente Supabase singleton para el frontend.
