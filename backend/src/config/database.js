@@ -9,7 +9,8 @@ if (fs.existsSync(envPath)) {
   require('dotenv').config();
 }
 
-const connectionString = process.env.DATABASE_URL_SUPABASE || process.env.DATABASE_URL;
+const rawConnectionString = process.env.DATABASE_URL_SUPABASE || process.env.DATABASE_URL || '';
+const connectionString = rawConnectionString.trim();
 
 if (!connectionString) {
   throw new Error(
