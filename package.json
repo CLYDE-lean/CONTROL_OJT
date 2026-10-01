@@ -5,6 +5,9 @@
   "description": "Portal BI Control Operativo OJT de 5 Días con API serverless (Vercel / Netlify)",
   "main": "backend/src/app.js",
   "scripts": {
+    "start": "node backend/src/app.js",
+    "dev:backend": "node backend/src/app.js",
+    "dev:frontend": "npm --prefix frontend run dev",
     "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
