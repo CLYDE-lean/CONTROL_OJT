@@ -165,48 +165,116 @@ class OjtMetricsService {
       try {
         console.log('⚡ [BI Engine] Cargando In-Memory Fast Index desde Supabase...');
         const t0 = Date.now();
-        const active = await this.getActiveTable();
-        if (!active.table) {
-          this.cacheData = [];
-          return [];
+        let loadedRows = [];
+
+        // Estrategia 1: Supabase HTTPS API (IPv4 nativo, compatible con Vercel serverless y ultrarrápido en ~4s)
+        try {
+          const { createClient } = require('@supabase/supabase-js');
+          const sbUrl = process.env.SUPABASE_URL || 'https://ujqehcpglfhnytzsyedp.supabase.co';
+          const sbKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqcWVoY3BnbGZobnl0enN5ZWRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NjA3NTYsImV4cCI6MjEwMTMzNjc1Nn0.smga3kyVkX_hiMA42e8zs4VNaB8nubTeDLapsX4zvqA';
+          const sbClient = createClient(sbUrl, sbKey);
+
+          const { count, error: countErr } = await sbClient.from('control_ojt').select('*', { count: 'exact', head: true });
+          if (!countErr && count > 0) {
+            this.activeTableName = 'control_ojt';
+            const pageSize = 1000;
+            const totalPages = Math.ceil(count / pageSize);
+            const batchRequests = [];
+            for (let i = 0; i < totalPages; i++) {
+              batchRequests.push(
+                sbClient.from('control_ojt')
+                  .select('dni, asesor, formador, campana, cod_grupo, semana, modalidad, estado, sigla, motivo_baja, q_atendidas, dia_conexion, kpi_1_num, kpi_1_denom, kpi_2_num, kpi_2_denom, kpi_3_num, kpi_3_denom, fecha_asistencia, fecha_inicio_capa, fecha_inicio_ojt, fecha_ingreso_op, tipo_reclutado, segmento, periodo')
+                  .range(i * pageSize, (i + 1) * pageSize - 1)
+              );
+            }
+            const pages = await Promise.all(batchRequests);
+            for (const p of pages) {
+              if (p.data) {
+                p.data.forEach(r => {
+                  loadedRows.push({
+                    dni: r.dni,
+                    asesor: r.asesor,
+                    formador: r.formador,
+                    campana: r.campana,
+                    grupo: r.cod_grupo,
+                    semana: r.semana,
+                    modalidad: r.modalidad,
+                    estado: r.estado,
+                    sigla: r.sigla,
+                    motivo_baja: r.motivo_baja,
+                    q_atendidas: r.q_atendidas,
+                    kpi1_num: r.kpi_1_num,
+                    kpi1_denom: r.kpi_1_denom,
+                    kpi2_num: r.kpi_2_num,
+                    kpi2_denom: r.kpi_2_denom,
+                    kpi3_num: r.kpi_3_num,
+                    kpi3_denom: r.kpi_3_denom,
+                    fecha_asistencia: r.fecha_asistencia,
+                    fecha_inicio_capa: r.fecha_inicio_capa,
+                    fecha_inicio_ojt: r.fecha_inicio_ojt,
+                    fecha_ingreso_op: r.fecha_ingreso_op,
+                    tipo_reclutado: r.tipo_reclutado,
+                    segmento: r.segmento,
+                    periodo_raw: r.periodo,
+                    jornada_raw: '',
+                    dia_conexion_raw: r.dia_conexion
+                  });
+                });
+              }
+            }
+            console.log(`✅ [BI Engine] ${loadedRows.length} registros cargados vía Supabase HTTPS API (IPv4) en ${Date.now() - t0} ms`);
+          }
+        } catch (httpsErr) {
+          console.warn('⚠️ Supabase HTTPS API error, intentando pg pool:', httpsErr.message);
         }
 
-        this.activeTableName = active.table;
-        const cols = await this.getColumnNames(active.table);
+        // Estrategia 2: Fallback vía pg pool directo
+        if (loadedRows.length === 0) {
+          const active = await this.getActiveTable();
+          if (!active.table) {
+            this.cacheData = [];
+            return [];
+          }
 
-        const query = `
-          SELECT 
-            CAST(${cols.dniCol} AS VARCHAR) as dni,
-            TRIM(CAST(${cols.asesorCol} AS VARCHAR)) as asesor,
-            TRIM(CAST(${cols.formadorCol} AS VARCHAR)) as formador,
-            TRIM(CAST(${cols.campanaCol} AS VARCHAR)) as campana,
-            TRIM(CAST(${cols.grupoCol} AS VARCHAR)) as grupo,
-            TRIM(CAST(${cols.semanaCol} AS VARCHAR)) as semana,
-            TRIM(CAST(${cols.modalidadCol} AS VARCHAR)) as modalidad,
-            TRIM(CAST(${cols.estadoCol} AS VARCHAR)) as estado,
-            TRIM(CAST(${cols.siglaCol} AS VARCHAR)) as sigla,
-            TRIM(CAST(${cols.motivoBajaCol} AS VARCHAR)) as motivo_baja,
-            CAST(${cols.qAtendidasDiaCol || cols.qAtendidasCol} AS VARCHAR) as q_atendidas,
-            CAST(${cols.kpi1NumCol} AS VARCHAR) as kpi1_num,
-            CAST(${cols.kpi1DenomCol} AS VARCHAR) as kpi1_denom,
-            CAST(${cols.kpi2NumCol} AS VARCHAR) as kpi2_num,
-            CAST(${cols.kpi2DenomCol} AS VARCHAR) as kpi2_denom,
-            CAST(${cols.kpi3NumCol} AS VARCHAR) as kpi3_num,
-            CAST(${cols.kpi3DenomCol} AS VARCHAR) as kpi3_denom,
-            ${cols.fechaAsistenciaCol ? `CAST(${cols.fechaAsistenciaCol} AS VARCHAR)` : "''"} as fecha_asistencia,
-            ${cols.fechaInicioCol ? `CAST(${cols.fechaInicioCol} AS VARCHAR)` : "''"} as fecha_inicio_capa,
-            ${cols.fechaOjtCol ? `CAST(${cols.fechaOjtCol} AS VARCHAR)` : "''"} as fecha_inicio_ojt,
-            ${cols.fechaIngresoOpCol ? `CAST(${cols.fechaIngresoOpCol} AS VARCHAR)` : "''"} as fecha_ingreso_op,
-            ${cols.tipoReclutadoCol ? `TRIM(CAST(${cols.tipoReclutadoCol} AS VARCHAR))` : "'APTO'"} as tipo_reclutado,
-            ${cols.segmentoCol ? `TRIM(CAST(${cols.segmentoCol} AS VARCHAR))` : "'GENERAL'"} as segmento,
-            ${cols.periodoCol ? `TRIM(CAST(${cols.periodoCol} AS VARCHAR))` : "''"} as periodo_raw,
-            ${cols.jornadaCol ? `TRIM(CAST(${cols.jornadaCol} AS VARCHAR))` : "''"} as jornada_raw,
-            CAST(NULLIF(REGEXP_REPLACE(CAST(${cols.diaConexionCol} AS VARCHAR), '[^0-9]', '', 'g'), '') AS INT) as dia_conexion_raw
-          FROM public."${active.table}"
-        `;
+          this.activeTableName = active.table;
+          const cols = await this.getColumnNames(active.table);
 
-        const res = await db.query(query);
-        this.cacheData = res.rows.map((r, idx) => {
+          const query = `
+            SELECT 
+              CAST(${cols.dniCol} AS VARCHAR) as dni,
+              TRIM(CAST(${cols.asesorCol} AS VARCHAR)) as asesor,
+              TRIM(CAST(${cols.formadorCol} AS VARCHAR)) as formador,
+              TRIM(CAST(${cols.campanaCol} AS VARCHAR)) as campana,
+              TRIM(CAST(${cols.grupoCol} AS VARCHAR)) as grupo,
+              TRIM(CAST(${cols.semanaCol} AS VARCHAR)) as semana,
+              TRIM(CAST(${cols.modalidadCol} AS VARCHAR)) as modalidad,
+              TRIM(CAST(${cols.estadoCol} AS VARCHAR)) as estado,
+              TRIM(CAST(${cols.siglaCol} AS VARCHAR)) as sigla,
+              TRIM(CAST(${cols.motivoBajaCol} AS VARCHAR)) as motivo_baja,
+              CAST(${cols.qAtendidasDiaCol || cols.qAtendidasCol} AS VARCHAR) as q_atendidas,
+              CAST(${cols.kpi1NumCol} AS VARCHAR) as kpi1_num,
+              CAST(${cols.kpi1DenomCol} AS VARCHAR) as kpi1_denom,
+              CAST(${cols.kpi2NumCol} AS VARCHAR) as kpi2_num,
+              CAST(${cols.kpi2DenomCol} AS VARCHAR) as kpi2_denom,
+              CAST(${cols.kpi3NumCol} AS VARCHAR) as kpi3_num,
+              CAST(${cols.kpi3DenomCol} AS VARCHAR) as kpi3_denom,
+              ${cols.fechaAsistenciaCol ? `CAST(${cols.fechaAsistenciaCol} AS VARCHAR)` : "''"} as fecha_asistencia,
+              ${cols.fechaInicioCol ? `CAST(${cols.fechaInicioCol} AS VARCHAR)` : "''"} as fecha_inicio_capa,
+              ${cols.fechaOjtCol ? `CAST(${cols.fechaOjtCol} AS VARCHAR)` : "''"} as fecha_inicio_ojt,
+              ${cols.fechaIngresoOpCol ? `CAST(${cols.fechaIngresoOpCol} AS VARCHAR)` : "''"} as fecha_ingreso_op,
+              ${cols.tipoReclutadoCol ? `TRIM(CAST(${cols.tipoReclutadoCol} AS VARCHAR))` : "'APTO'"} as tipo_reclutado,
+              ${cols.segmentoCol ? `TRIM(CAST(${cols.segmentoCol} AS VARCHAR))` : "'GENERAL'"} as segmento,
+              ${cols.periodoCol ? `TRIM(CAST(${cols.periodoCol} AS VARCHAR))` : "''"} as periodo_raw,
+              ${cols.jornadaCol ? `TRIM(CAST(${cols.jornadaCol} AS VARCHAR))` : "''"} as jornada_raw,
+              CAST(NULLIF(REGEXP_REPLACE(CAST(${cols.diaConexionCol} AS VARCHAR), '[^0-9]', '', 'g'), '') AS INT) as dia_conexion_raw
+            FROM public."${active.table}"
+          `;
+
+          const res = await db.query(query);
+          loadedRows = res.rows;
+        }
+
+        this.cacheData = loadedRows.map((r, idx) => {
           const diaParsed = (r.dia_conexion_raw !== null && r.dia_conexion_raw !== undefined && r.dia_conexion_raw !== '')
             ? parseInt(r.dia_conexion_raw, 10)
             : null;
