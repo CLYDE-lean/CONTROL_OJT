@@ -41,6 +41,29 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Diagnostic check
+app.get('/api/diag', async (req, res) => {
+  const dbUrl = process.env.DATABASE_URL_SUPABASE || process.env.DATABASE_URL || '';
+  const diag = {
+    hasDatabaseUrlSupabase: !!process.env.DATABASE_URL_SUPABASE,
+    hasDatabaseUrl: !!process.env.DATABASE_URL,
+    dbHost: dbUrl ? dbUrl.replace(/^.*@([^:\/]+).*$/, '$1') : 'NO_CONFIGURADO',
+    activeTable: null,
+    cacheCount: 0,
+    error: null
+  };
+  try {
+    const ojtMetricsService = require('./services/ojtMetricsService');
+    diag.activeTable = await ojtMetricsService.getActiveTable();
+    const cache = await ojtMetricsService.ensureCache();
+    diag.cacheCount = cache ? cache.length : 0;
+    res.json(diag);
+  } catch (err) {
+    diag.error = err.message;
+    res.json(diag);
+  }
+});
+
 const startServer = (portToUse) => {
   const server = app.listen(portToUse, async () => {
     console.log('===========================================================');
